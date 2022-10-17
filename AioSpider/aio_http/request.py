@@ -6,14 +6,13 @@ class Request(object):
 
     def __init__(
             self, url, method='GET', callback=None, params=None, headers=None, encoding='utf-8',
-            data=None, cookies=None, timeout=0, proxy=None, priority=1, meta=None, *args, **kwargs
+            data=None, timeout=0, proxy=None, priority=1, meta=None, *args, **kwargs
         ):
 
         self.encoding = encoding
         self.url = self._set_url(url)
         self.method = method.upper()
         self.params = params or {}
-        self.cookies = cookies or {}
         self.callback = callback
 
         self.headers = headers or {}

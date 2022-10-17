@@ -1,12 +1,8 @@
 import re
-import json
 import execjs
 from pprint import pformat
 
-from lxml import etree
-
-import AioSpider
-from AioSpider.parse import ReParse, XpathParse
+from AioSpider.parse import Parse
 from .request import Request
 
 
@@ -24,7 +20,6 @@ class Response(object):
         else:
             self.request = request
         self._cached_selector = None
-        self._cached_xpath = None
         self.meta = request.meta
 
     @property
@@ -33,30 +28,12 @@ class Response(object):
         if self._cached_selector is None:
             self._cached_selector = Selector(self.text)
         return self._cached_selector
-    
-    @property
-    def cached_xpath(self):
-        if self._cached_xpath is None:
-            if self.text:
-                self._cached_xpath = etree.HTML(self.text)
-            else:
-                self._cached_xpath = etree.HTML('<html></html>>')
-        return self._cached_xpath
 
     def xpath(self, query, **kwargs):
-        return XpathParse(self.cached_xpath.xpath(query, **kwargs))
+        return self.selector.xpath(query, **kwargs)
 
     def css(self, query):
         return self.selector.css(query)
-
-    @property
-    def json(self):
-        return json.loads(self.text)
-
-    @property
-    def jsonp(self):
-        text = re.findall('.*?\((.*)\)', self.text)
-        return json.loads(text[0]) if text else {}
 
     @property
     def _execjs(self):
@@ -68,9 +45,9 @@ class Response(object):
     def call_js(self, name, *args):
         return self._execjs.call(name, *args)
 
-    def re(self, regex, **kwargs):
-        arr = re.findall(regex, self.text, **kwargs)
-        return ReParse(arr)
+    def re(self, regex):
+        arr = re.findall(regex, self.text)
+        return Parse(arr)
 
     def __str__(self):
         s = f'Response <{self.status} {self.request.method} {self.url}>'

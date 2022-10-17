@@ -24,12 +24,11 @@ class DownloadHandler:
             'headers': request.headers,
             'timeout': request.timeout or getattr(self.settings, "REQUEST_TIMEOUT", 10),
             'params': request.params,
+            'cookies': request.cookies,
             'proxy': request.proxy
         }
 
         url = request.url
-
-        # async with aiohttp.ClientSession() as session:
 
         if request.method == "POST":
             response = await session.post(url, data=request.data, **kwargs)
@@ -42,10 +41,13 @@ class DownloadHandler:
                 return e
         try:
             content = await response.read()
-            return Response(
+            res = Response(
                 url=str(response.url), status=response.status, headers=response.headers,
                 text=content, request=request
             )
+            for attr in request.kwargs:
+                setattr(res, attr, request.kwargs[attr])
+            return res
         except Exception as e:
             return e
 
@@ -87,6 +89,8 @@ class Downloader:
             return None
 
         for m in self.middleware:
+            if not hasattr(m, 'process_request'):
+                continue
             ret = m.process_request(request)
             if ret is None:
                 continue
@@ -107,6 +111,8 @@ class Downloader:
             return None
 
         for m in reversed(self.middleware):
+            if not hasattr(m, 'process_response'):
+                continue
             ret = m.process_response(response)
             if ret is None:
                 continue
@@ -127,6 +133,8 @@ class Downloader:
             return None
 
         for m in self.middleware:
+            if not hasattr(m, 'process_exception'):
+                continue
             ret = m.process_exception(request, exception)
             if ret is None:
                 continue
@@ -136,6 +144,8 @@ class Downloader:
                 return ret
             elif isinstance(ret, Response):
                 return ret
+            elif isinstance(ret, Exception):
+                raise ret
             else:
                 raise Exception('中间件的process_exception方法返回值必须为 Request/Response/None/False 对象')
         else:

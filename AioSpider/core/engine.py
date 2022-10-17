@@ -1,7 +1,9 @@
 import os
+import sys
 import time
 import json
 import asyncio
+from pathlib import Path
 from pprint import pformat
 from datetime import datetime
 from importlib import import_module
@@ -36,9 +38,7 @@ class Engine:
 
     def _read_settings(self):
 
-        pro_settings_path = os.path.split(os.path.dirname(os.getcwd()))[-1] + '.settings'
-        pro_settings = import_module(pro_settings_path)
-
+        pro_settings = import_module(str(Path().cwd().parent.name) + '.settings')
         # 项目settings
         for i in (i for i in dir(settings)):
             if getattr(pro_settings, i, None):
@@ -208,6 +208,7 @@ class Engine:
         if hasattr(AioSpider.db, 'close'):
             AioSpider.db.close()
 
+        self.logger.info(f'爬取结束，总共成功发起{await self.scheduler.request_count()}个请求')
         self.spider.spider_close()
 
     def start(self):
@@ -217,7 +218,8 @@ class Engine:
             # 将协程注册到事件循环中
             self.loop.run_until_complete(self.execute())
         except Exception as e:
-            self.logger.error(str(e))
+            raise e
+            # self.logger.error(str(e))
         finally:
             self.loop.run_until_complete(self.loop.shutdown_asyncgens())
             self.loop.close()
@@ -255,6 +257,7 @@ class Engine:
 
         self.logger.info(f'{">" * 25} 采集结束 {"<" * 25}')
         self.logger.info(f'{">" * 25} 总共用时: {datetime.now() - start_time} {"<" * 25}')
+        time.sleep(1)
 
     async def _next_request(self):
         """ 不断的获取下一个请求 """
@@ -288,6 +291,11 @@ class Engine:
 
                 continue
 
+            if semaphore._value == 0 and task_sleep:
+                if task_sleep - 0.15 <= 0:
+                    task_sleep = 0
+                time.sleep(task_sleep - 0.15)
+
             # 如果取出来的不是请求 忽略
             if isinstance(request, Request):
                 # 上锁 保证前面设置的并发量生效 每次上锁value值会减一
@@ -295,9 +303,6 @@ class Engine:
                 await semaphore.acquire()
                 # 创建任务 注册到事件循环中
                 self.loop.create_task(self._process_request(request, semaphore))
-
-            if semaphore._value == 0 and task_sleep:
-                time.sleep(task_sleep - 0.15)
 
             continue
 
@@ -314,10 +319,11 @@ class Engine:
 
         # 处理响应
         if isinstance(http_obj, Response):
+            await self.scheduler.set_status(http_obj)
             await self.process_response(http_obj, request)
         elif isinstance(http_obj, Request):
             await semaphore.acquire()
-            self.loop.create_task(self._process_request(request, semaphore))
+            self.loop.create_task(self._process_request(http_obj, semaphore))
         else:
             pass
 
@@ -329,7 +335,6 @@ class Engine:
 
         response = await self.downloader.fetch(request)
         response.request = request
-        await self.scheduler.set_status(response)
 
         return response
 

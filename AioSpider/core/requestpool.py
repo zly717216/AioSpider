@@ -653,7 +653,6 @@ class RequestPool(AioObject):
     async def _set_status(self, response):
 
         request = response.request
-        AioSpider.logger.debug(f'总共完成{await self._url_db_qsize()}个请求 --> {response}')
 
         # 1.从pending队列中删除
         if await self.pending.has_request(request):
@@ -665,11 +664,12 @@ class RequestPool(AioObject):
         # 2.如果状态码200
         if response.status == 200:
             await self.url_db._set_success(request)
-            return
         else:
             await self.url_db._set_failure(request)
             await self.failure.put_request(request)
-            return
+
+        AioSpider.logger.debug(f'总共完成{await self._url_db_qsize()}个请求 --> {response}')
+        return
 
     async def _push_to_waiting(self, request):
         """将request添加到waiting队列"""
@@ -774,7 +774,7 @@ class RequestPool(AioObject):
         return self.failure.request_size(loc=loc)
 
     async def _url_db_qsize(self, loc=True):
-        return await self.url_db.request_size(loc=loc)
+        return await self.url_db.request_size(loc=False)
 
     def _waiting_empty(self, loc=True):
         return self._waiting_qsize(loc=loc) == 0

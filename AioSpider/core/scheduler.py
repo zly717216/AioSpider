@@ -52,5 +52,8 @@ class Scheduler(AioObject):
 
         return False
 
+    async def request_count(self):
+        return await self._request_pool._url_db_qsize()
+
     async def close(self):
         await self._request_pool.close()

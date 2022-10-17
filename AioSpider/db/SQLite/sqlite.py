@@ -7,7 +7,7 @@ class SQLiteAPI:
 
     engine = 'sqlite'
 
-    def __init__(self, path, timeout=None):
+    def __init__(self, path, timeout=10):
         self.conn = sqlite3.connect(database=path, timeout=timeout)
 
     def _cursor(self):
@@ -31,7 +31,7 @@ class SQLiteAPI:
             cur.close()
             self.commit()
 
-    def _make_select_sql(self, table: str, field: Optional[Iterable] = None, where: Optional[dict] = None) -> str:
+    def _make_select_sql(self, table: str, field: Union[list, tuple, str] = None, where: Optional[dict] = None) -> str:
         """
             生成查询语句
             @params:
@@ -44,7 +44,7 @@ class SQLiteAPI:
             sql = f'SELECT * FROM {table}'
         elif isinstance(field, str):
             sql = f'SELECT {field} FROM {table}'
-        elif isinstance(field, list):
+        elif isinstance(field, (list, tuple)):
             sql = f'SELECT {",".join(field)} FROM {table}'
         else:
             raise TypeError(f'field 参数类型错误，当前类型为：{type(field)}')
@@ -86,6 +86,21 @@ class SQLiteAPI:
         sql = f'INSERT INTO {table} ({field_str}) VALUES({valve_str})'
 
         return sql
+
+    def _serialize_to_dict_one(self, cur, data: Iterable) -> dict:
+        """
+            将查询到的数据序列化成字典
+            @params:
+                cur: cursor 数据库游标对象
+                data： 嵌套可迭代对象
+        """
+
+        f = [i[0] for i in cur.description]
+
+        if data:
+            return dict(zip(f, data))
+        else:
+            return {}
 
     def _serialize_to_dict(self, cur, data: Iterable) -> list:
         """
@@ -135,7 +150,7 @@ class SQLiteAPI:
         self._execute(sql)
 
     def find_one(
-            self, table: Optional[str] = None, field: Optional[Iterable] = None,
+            self, table: Optional[str] = None, field: Union[list, tuple, str] = None,
             where: Optional[dict] = None, sql: Optional[str] = None
     ) -> list:
         """
@@ -153,13 +168,13 @@ class SQLiteAPI:
         cur = self._cursor()
         cur.execute(sql)
         result = cur.fetchone()
-        data = self._serialize_to_dict(cur, result)
+        data = self._serialize_to_dict_one(cur, result)
         cur.close()
 
         return data
 
     def find_many(
-            self, table: Optional[str] = None, field: Optional[Iterable] = None,
+            self, table: Optional[str] = None, field: Union[list, tuple, str] = None,
             where: Optional[dict] = None, sql: Optional[str] = None
     ) -> list:
         """

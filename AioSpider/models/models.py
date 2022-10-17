@@ -71,13 +71,14 @@ class SQLContainer(Container):
 
             await AioSpider.db.insert_many(table=k, items=self._contain[k])
             self.add_count(table, self.sql_size(table))
-            AioSpider.logger.info(f'本次已向{k}表提交{self.sql_size(table)}条记录，总共已提交{self.get_count(table)}条')
+            AioSpider.logger.info(f'本次已向{k}表提交{self.sql_size(table)}条记录，总共已提交{self.get_count(table)}条记录')
             self.clear(k)
 
-        AioSpider.logger.info(
-            f'爬虫即将关闭：总共保存 {self.all_count()} 条数据'
-            f'（{"、".join([f"{k}表{v}条" for k, v in self.item_count.items()])}）'
-        )
+        if self.all_count():
+            AioSpider.logger.info(
+                f'爬虫即将关闭：总共保存 {self.all_count()} 条数据'
+                f'（{"、".join([f"{k}表{v}条" for k, v in self.item_count.items()])}）'
+            )
 
 
 class CSVContainer(Container):
@@ -115,6 +116,7 @@ class Model:
     id = AutoIntField(name='id', db_index=True)
     order = None
     container = Container()
+    name_type = 'smart'   # lower / upper / smart
 
     def __init__(self, item=None):
         if item is not None:
@@ -133,10 +135,17 @@ class Model:
 
     @property
     def __name__(self):
-        name = self.__class__.__name__.replace('model', '').replace('Model', '')
-        name = re.findall('[A-Z][^A-Z]*', name)
-        name = [i.lower() for i in  name]
-        return '_'.join(name)
+        if self.name_type == 'lower':
+            name = self.__class__.__name__.replace('model', '').replace('Model', '')
+            return name.lower()
+        elif self.name_type == 'upper':
+            name = self.__class__.__name__.replace('model', '').replace('Model', '')
+            return name.upper()
+        else:
+            name = self.__class__.__name__.replace('model', '').replace('Model', '')
+            name = re.findall('[A-Z][^A-Z]*', name)
+            name = [i.lower() for i in  name]
+            return '_'.join(name)
 
     def _check_attr_(self):
 
@@ -266,10 +275,17 @@ class SQLiteModel(SQLModel):
 
     @classmethod
     async def close(cls):
-        name = cls.__name__.replace('model', '').replace('Model', '')
-        name = re.findall('[A-Z][^A-Z]*', name)
-        name = [i.lower() for i in name]
-        await cls.container.close('_'.join(name))
+        if cls.name_type == 'lower':
+            name = cls.__name__.replace('model', '').replace('Model', '')
+            await cls.container.close(name.lower())
+        elif cls.name_type == 'upper':
+            name = cls.__name__.replace('model', '').replace('Model', '')
+            await cls.container.close(name.upper())
+        else:
+            name = cls.__name__.replace('model', '').replace('Model', '')
+            name = re.findall('[A-Z][^A-Z]*', name)
+            name = [i.lower() for i in name]
+            await cls.container.close('_'.join(name))
 
 
 class CSVModel(Model):
@@ -283,9 +299,15 @@ class CSVModel(Model):
         await self.container.commit(self, item, encoding=self.encoding)
 
     @classmethod
-    async def close(cls):
-        name = cls.__name__.replace('model', '').replace('Model', '')
-        name = re.findall('[A-Z][^A-Z]*', name)
-        name = [i.lower() for i in name]
-        await cls.container.close('_'.join(name), encoding=cls.encoding)
-
+    async def _close(cls):
+        if cls.name_type == 'lower':
+            name = cls.__name__.replace('model', '').replace('Model', '')
+            await cls.container.close(name.lower(), encoding=cls.encoding)
+        elif cls.name_type == 'upper':
+            name = cls.__name__.replace('model', '').replace('Model', '')
+            await cls.container.close(name.upper(), encoding=cls.encoding)
+        else:
+            name = cls.__name__.replace('model', '').replace('Model', '')
+            name = re.findall('[A-Z][^A-Z]*', name)
+            name = [i.lower() for i in name]
+            await cls.container.close('_'.join(name), encoding=cls.encoding)

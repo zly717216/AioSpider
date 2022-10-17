@@ -1,6 +1,9 @@
 import time
 from decimal import Decimal
+from datetime import datetime
 from typing import Optional, Union
+
+from AioSpider import tools
 
 
 class Field:
@@ -166,14 +169,6 @@ class CharField(Field):
 
     def _check_value(self):
 
-        if not isinstance(self._value, str):
-            raise ValueError(f'{self.name}值错误，value={self._value}, value必须为str类型')
-
-        if len(self._value) > 255:
-            raise ValueError(
-                f'{self.name}值错误，value={self._value}, max_length is {self.max_length}, value超出最大长度范围'
-            )
-
         if self.choices is not None:
             if isinstance(self.choices, (tuple, list)):
                 for i in self.choices:
@@ -183,6 +178,14 @@ class CharField(Field):
                     return
             else:
                 raise TypeError(f'类型错误：choice 选项必须为元组或列表类型，当前类型为：{type(self.choices)}')
+
+        if not isinstance(self._value, str):
+            raise ValueError(f'{self.name}值错误，value={self._value}, value必须为str类型')
+
+        if len(self._value) > 255:
+            raise ValueError(
+                f'{self.name}值错误，value={self._value}, max_length is {self.max_length}, value超出最大长度范围'
+            )
 
         if not self._value:
             if self.default:
@@ -222,6 +225,9 @@ class IntField(Field):
         super(IntField, self)._check(field=field)
 
     def _check_value(self):
+        
+        if isinstance(self._value, float):
+            self._value = int(self._value)
 
         if not isinstance(self._value, int):
             raise ValueError(f'{self.name}值错误，value={self._value}, value必须为int类型')
@@ -287,14 +293,14 @@ class FloatField(Field):
 
 class BoolField(Field):
 
-    def __init__(self, name, db_column=None, is_save=True):
+    def __init__(self, name, default=False, db_column=None, is_save=True):
 
         super(BoolField, self).__init__(
             name=name, max_length=None, unique=False, blank=False, null=False,
-            db_index=False, default=False, choices=None, db_column=db_column,
+            db_index=False, default=default, choices=None, db_column=db_column,
             validators=None, is_save=is_save
         )
-        self._value = False
+        self._value = default
         self._check(f'{name}(BoolField)')
 
     def _check(self, field='BoolField'):
@@ -302,10 +308,7 @@ class BoolField(Field):
 
     def _check_value(self):
 
-        if not isinstance(self._value, bool):
-            raise ValueError(f'{self.name}值错误，value={self._value}, value必须为True/False')
-
-        if not self._value:
+        if self._value is None:
             self._value = self.default
 
         # 转换, 0 False 1 True
@@ -361,13 +364,13 @@ class AutoIntField(IntField):
 class StampField(IntField):
 
     def __init__(
-            self, name, blank=True, default=0, null=True, validators=None,
+            self, name, blank=True, null=True, validators=None,
             db_column=None, is_save=True, db_index=False, unique=False,
             to_second=True, to_millisecond=False
     ):
         super(StampField, self).__init__(
             name=name, unique=unique, blank=blank, null=null,
-            db_index=db_index, default=default, db_column=db_column,
+            db_index=db_index, default=None, db_column=db_column,
             validators=validators, is_save=is_save
         )
         self._value = 0
@@ -405,20 +408,26 @@ class StampField(IntField):
 
     def _check_value(self):
 
-        if isinstance(self._value, int):
-            pass
+        if not self._value:
+            self._value = int(time.time())
+
+        if isinstance(self._value, (float, int)):
+            if len(str(int(self._value))) != 10 and len(str(int(self._value))) != 13:
+                raise ValueError(f'{self.name}值错误，字段值与预期值不匹配：{self._value}，值必须为可识别的字符串时间或数字')
 
         elif isinstance(self._value, str):
-            try:
-                self._value = eval(self._value)
-            except:
-                raise ValueError(f'{self.name}字段值与预期值不匹配：{self._value}')
-
+            if self._value.isdigit():
+                self._value = int(self._value)
+            elif len(self._value.split('.')) == 2:
+                self._value = float(self._value)
+            else:
+                try:
+                    self._value = tools.TimeConverter.strtime_to_stamp(self._value)
+                except:
+                    raise ValueError(f'{self.name}值错误，字段值与预期值不匹配：{self._value}，值必须为可识别的字符串时间或数字')
+                
         else:
-            raise ValueError(f'{self.name}值错误，value={self._value}, value必须为int类型')
-
-        if not self._value:
-            self._value = self.default
+            raise TypeError(f'{self.name}值类型错误，value={self._value}, value必须为{type(self._value)}类型')
 
         if self.to_second:
             self._to_second()
@@ -495,3 +504,89 @@ class StampField(IntField):
     #         self._value = time.strftime("%Y-%m-%d %H:%M:%S", time_local)
     #     else:
     #         self._value = time.strftime("%Y-%m-%d %H:%M:%S.%f", time_local)
+
+
+class DateTimeField(Field):
+
+    def __init__(self, name, db_column=None):
+        super(DateTimeField, self).__init__(
+            name=name, max_length=None, unique=False, blank=False, null=False,
+            db_index=False, default=None, choices=None, db_column=db_column,
+            validators=None, is_save=True
+        )
+        self._value = datetime.now()
+        self._check(f'{name}(DateTimeField)')
+
+    def _check(self, field='DateTimeField'):
+        return super(DateTimeField, self)._check(field=field)
+
+    def _check_value(self):
+
+        if self._value is None:
+            self._value = datetime.now()
+
+        if isinstance(self._value, str):
+            try:
+                self._value = tools.TimeConverter.strtime_to_time(self._value)
+            except:
+                raise ValueError(f'值错误：{self.name} 必须为可识别的时间字符串，当前值为：{self._value}')
+
+        if isinstance(self._value, int):
+            try:
+                self._value = tools.TimeConverter.stamp_to_time(self._value)
+            except:
+                raise ValueError(f'值错误：{self.name} 必须秒级（10位）或毫秒级（13位）时间戳，当前值为：{self._value}')
+
+        if not isinstance(self._value, datetime):
+            raise TypeError(f'类型错误：{self.name} 必须为时间类型，当前类型为：{type(self._value)}')
+
+    def _table_sql(self):
+
+        sql = f'{self.db_column} DATETIME NOT NULL'
+        return sql
+
+
+class TextField(Field):
+
+    def __init__(
+            self, name, default=None, validators=None, db_column=None, is_save=True
+    ):
+        super(TextField, self).__init__(
+            name=name, max_length=None, unique=False, blank=True, null=True,
+            db_index=False, default=default, choices=None, db_column=db_column,
+            validators=validators, is_save=is_save
+        )
+        self._value = ''
+        self._check(f'{name}(TextField)')
+
+    def _check(self, field='TextField'):
+        return super(TextField, self)._check(field=field)
+
+    def _check_default(self):
+
+        if self.default is None:
+            self.default = ''
+            return True
+
+        if not isinstance(self.default, str):
+            self._message.append('default字段必须为str类型')
+            return False
+
+        return True
+
+    def _check_value(self):
+
+        if not isinstance(self._value, str):
+            raise ValueError(f'{self.name}值错误，value={self._value}, value必须为str类型')
+
+        if not self._value:
+            if self.default:
+                self._value = self.default or ''
+
+    def _table_sql(self):
+        sql = f'{self.db_column} BLOB NULL'
+
+        if self.default is not None:
+            sql += f' DEFAULT "{self.default}"'
+
+        return sql

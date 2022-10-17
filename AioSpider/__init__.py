@@ -1,6 +1,12 @@
+import sys
+from pathlib import Path
+
 from AioSpider.utils import tools
 from AioSpider.log import logger as lgr
 from AioSpider import settings as sts
+
+
+sys.path.append(str(Path().cwd().parent.parent))
 
 
 class AioObject:

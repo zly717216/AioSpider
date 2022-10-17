@@ -1,1 +1,1 @@
-from AioSpider.parse.parse import Parse
+from AioSpider.parse.parse import ReParse, XpathParse

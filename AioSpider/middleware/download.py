@@ -1,4 +1,5 @@
 import random
+from abc import ABCMeta, abstractmethod
 from asyncio import exceptions
 from urllib.parse import urlparse
 
@@ -1260,7 +1261,7 @@ user_agent = {
 }
 
 
-class Middleware:
+class Middleware(metaclass=ABCMeta):
     """中间件基类"""
 
     def __init__(self, spider, settings, scheduler):
@@ -1268,7 +1269,8 @@ class Middleware:
         self.spider = spider
         self.settings = settings
         self.failure_pool = scheduler.failure_pool
-
+    
+    @abstractmethod
     def process_request(self, request):
         """
             处理请求
@@ -1283,6 +1285,7 @@ class Middleware:
 
         return None
 
+    @abstractmethod
     def process_response(self, response):
         """
             处理请求
@@ -1296,7 +1299,18 @@ class Middleware:
         """
 
         return None
+    
+    
+class ErrorMiddleware(metaclass=ABCMeta):
+    """中间件基类"""
 
+    def __init__(self, spider, settings, scheduler):
+
+        self.spider = spider
+        self.settings = settings
+        self.failure_pool = scheduler.failure_pool
+
+    @abstractmethod
     def process_exception(self, request, exception):
         """
             处理请求
@@ -1307,6 +1321,7 @@ class Middleware:
                 Response: 交由引擎重新调度该Response对象
                 None: 正常，继续往下执行 穿过下一个中间件
                 False: 丢弃该Request或Response对象
+                exception: 将会抛出该异常
         """
 
         return None
@@ -1319,15 +1334,6 @@ class FirstMiddleware(Middleware):
         return None
 
     def process_response(self, response):
-        return None
-
-    def process_exception(self, request, exception):
-
-        if isinstance(exception, exceptions.TimeoutError):
-            AioSpider.logger.error(
-                f'网络连接超时：{request}, TIMEOUT: {request.timeout or getattr(self.settings, "REQUEST_TIMEOUT", 0)}'
-            )
-
         return None
 
 
@@ -1364,9 +1370,6 @@ class HeadersMiddleware(Middleware):
     def process_response(self, response):
         return None
 
-    def process_exception(self, request, exception):
-        return None
-
 
 class RetryMiddleware(Middleware):
     """重试中间件"""
@@ -1398,9 +1401,6 @@ class RetryMiddleware(Middleware):
         self.failure_pool.put_request(response.request)
         return response.request
 
-    def process_exception(self, request, exception):
-        return None
-
 
 class ProxyMiddleware(Middleware):
     """代理中间件"""
@@ -1427,9 +1427,6 @@ class ProxyMiddleware(Middleware):
     def process_response(self, response):
         return None
 
-    def process_exception(self, request, exception):
-        return None
-
 
 class LastMiddleware(Middleware):
     """最后执行的中间件"""
@@ -1447,15 +1444,32 @@ class LastMiddleware(Middleware):
         content = response.text
 
         if self.encoding_map.get(host) is None:
-            encoding = cchardet.detect(content)["encoding"]
-            encoding = encoding if encoding else response.request.encoding
-            encoding = "GB18030" if encoding.upper() in ("GBK", "GB2312") else encoding
-            self.encoding_map[host] = encoding
+            if hasattr(response.request, 'encoding'):
+                self.encoding_map[host] = response.request.encoding
+            else:
+                encoding = cchardet.detect(content)["encoding"]
+                encoding = encoding if encoding else response.request.encoding
+                encoding = "GB18030" if encoding.upper() in ("GBK", "GB2312") else encoding
+                self.encoding_map[host] = encoding
 
         text = content.decode(self.encoding_map[host], "replace")
         response.text = text
 
         return None
 
+
+class TimeoutErrorMiddleware(ErrorMiddleware):
+
     def process_exception(self, request, exception):
+        if isinstance(exception, exceptions.TimeoutError):
+            AioSpider.logger.error(
+                f'网络连接超时：{request}, TIMEOUT: {request.timeout or getattr(self.settings, "REQUEST_TIMEOUT", 0)}'
+            )
+
         return None
+    
+
+class ExceptionMiddleware(ErrorMiddleware):
+
+    def process_exception(self, request, exception):
+        return exception

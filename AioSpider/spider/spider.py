@@ -12,7 +12,7 @@ class Spider:
     settings = {
         'TASK_CONCURRENCY_COUNT': 100,
         'HEADERS': {},
-        'REQUEST_TIMEOUT': 3,
+        'REQUEST_TIMEOUT': 300,
         'REQUEST_PROXY': None,
     }
     logger = None
