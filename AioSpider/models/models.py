@@ -186,7 +186,7 @@ class Model:
     async def _save_csv(self):
         pass
 
-    def _save_mysql(self):
+    async def _save_mysql(self):
         pass
 
     def _save_mongo(self):
@@ -207,7 +207,7 @@ class Model:
             await self._save_csv()
 
         elif AioSpider.db.engine == 'mysql':
-            self._save_mysql()
+            await self._save_mysql()
 
         elif AioSpider.db.engine == 'mongo':
             self._save_mongo()
@@ -274,7 +274,34 @@ class SQLiteModel(SQLModel):
         await self._create_table()
 
     @classmethod
-    async def close(cls):
+    async def _close(cls):
+        if cls.name_type == 'lower':
+            name = cls.__name__.replace('model', '').replace('Model', '')
+            await cls.container.close(name.lower())
+        elif cls.name_type == 'upper':
+            name = cls.__name__.replace('model', '').replace('Model', '')
+            await cls.container.close(name.upper())
+        else:
+            name = cls.__name__.replace('model', '').replace('Model', '')
+            name = re.findall('[A-Z][^A-Z]*', name)
+            name = [i.lower() for i in name]
+            await cls.container.close('_'.join(name))
+
+
+class MySQLModel(SQLModel):
+
+    id = AutoIntField(name='id', db_index=True, auto_field='AUTO_INCREMENT')
+    container = SQLContainer()
+
+    async def _save_mysql(self):
+
+        item = self.make_item()
+
+        await self.container.commit(self, item)
+        await self._create_table()
+
+    @classmethod
+    async def _close(cls):
         if cls.name_type == 'lower':
             name = cls.__name__.replace('model', '').replace('Model', '')
             await cls.container.close(name.lower())

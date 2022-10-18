@@ -9,8 +9,8 @@ setup(
     author='zly',
     author_email='zly717216@qq.com',
     install_requires=[
-        'aiohttp', 'aiofiles', 'aiocsv', 'aiosqlite', 'aioredis', 'pymongo',
-        'pymysql', 'lxml', 'pyexecjs', 'chardet', 'cchardet'
+        'aiohttp', 'aiofiles', 'aiocsv', 'aiosqlite', 'aioredis', 'aiomysql',
+        'pymongo', 'pymysql', 'redis', 'lxml', 'pyexecjs', 'chardet', 'cchardet', 'w3lib',
     ],
     classifiers=[
           'Intended Audience :: Developers',

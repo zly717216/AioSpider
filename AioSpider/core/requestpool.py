@@ -511,7 +511,7 @@ class WaitingRequest:
             q = OrderQueue(1 * 10000 * 10000 * 10000)
             self.waiting[k] = [q.put(i) for i in self.waiting if isinstance(i, Request)]
 
-    def __del__(self):
+    # def __del__(self):
         """将队列中的request写入硬盘"""
 
         # for k in self.waiting:
@@ -519,7 +519,7 @@ class WaitingRequest:
         #
         # with open('waiting_url.pkl', 'wb') as f:
         #     pickle.dump(self.waiting, f)
-        pass
+        # pass
 
 
 class PendingRequest:
@@ -620,13 +620,13 @@ class FailureRequest:
             for request in request_list:
                 self.failure.put(request)
 
-    def __del__(self):
-        """将队列中的request写入硬盘"""
+    # def __del__(self):
+    #     """将队列中的request写入硬盘"""
 
         # request_list = [i for i in self.failure.queue]
         # with open('failure_url.pkl', 'wb') as f:
         #     pickle.dump(request_list, f)
-        pass
+        # pass
 
 
 class RequestPool(AioObject):

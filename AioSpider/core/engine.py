@@ -16,8 +16,8 @@ from AioSpider import settings, init_logger
 from AioSpider.downloader import Downloader
 from AioSpider.http import Request, Response
 from AioSpider.core.scheduler import Scheduler
-from AioSpider.db import SQLiteAPI, MySQLAPI, MongoAPI
-from AioSpider.aio_db import SQLiteAPI, CSVFile
+from AioSpider.db import SQLiteAPI, MongoAPI
+from AioSpider.aio_db import SQLiteAPI, CSVFile, MySQLAPI
 from AioSpider.middleware import FirstMiddleware, LastMiddleware
 
 
@@ -155,8 +155,8 @@ class Engine:
             my_timeout = db_engine['MYSQL']['MYSQL_CONNECT_TIMEOUT']
             my_time_zone = db_engine['MYSQL']['MYSQL_TIME_ZONE']
 
-            AioSpider.db = MySQLAPI(
-                host=my_host, port=my_port, database=my_db, user=my_user, password=my_pwd,
+            AioSpider.db = await MySQLAPI(
+                host=my_host, port=my_port, db=my_db, user=my_user, password=my_pwd,
                 connect_timeout=my_timeout, charset=my_charset, time_zone=my_time_zone
             )
             self.logger.info(f"MySql数据库已启动：\n{pformat(db_engine['MYSQL'])}")

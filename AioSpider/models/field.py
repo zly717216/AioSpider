@@ -330,13 +330,15 @@ class BoolField(Field):
 class AutoIntField(IntField):
 
     def __init__(
-            self, name, sep=1, validators=None, db_column=None, is_save=True, db_index=False
+            self, name, sep=1, validators=None, db_column=None, is_save=True, db_index=False,
+            auto_field='AUTOINCREMENT'
     ):
         super(AutoIntField, self).__init__(
             name=name, blank=False, default=1, null=False, validators=validators,
             db_column=db_column, is_save=is_save, db_index=db_index, unique=True
         )
         self.sep = sep
+        self.auto_field = auto_field
         self._value = 1
         self._check(f'{name}(AutoIntField)')
 
@@ -357,7 +359,7 @@ class AutoIntField(IntField):
 
     def _table_sql(self):
 
-        sql = f'{self.db_column} INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT'
+        sql = f'{self.db_column} INTEGER NOT NULL PRIMARY KEY {self.auto_field}'
         return sql
 
 

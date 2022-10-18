@@ -5,7 +5,7 @@ from importlib import import_module
 from .pipeline import Pipeline
 
 
-class SqlitePipeline(Pipeline):
+class MySQLPipeline(Pipeline):
 
     is_async = True
     model = None

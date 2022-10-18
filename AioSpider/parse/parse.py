@@ -1,4 +1,5 @@
 import re
+import json
 from typing import Any, Optional, TypeVar
 
 from lxml.etree import _Element, _ElementUnicodeResult, _ElementStringResult
@@ -23,8 +24,12 @@ class Parse:
         return Parse(self.arr[index], self.default)
     
     @property
-    def text(self):
+    def text(self) -> str:
         return self.extract_first(text=True)
+
+    @property
+    def json(self) -> dict:
+        return json.loads(self.text)
     
     def strip_text(self, strip: Optional[str] = None) -> str:
         if strip is None:
@@ -128,8 +133,12 @@ class ReParse:
         return self.arr.re(query=query, kwargs=kwargs)
     
     @property
-    def text(self):
+    def text(self) -> str:
         return self.arr.text
+
+    @property
+    def json(self) -> dict:
+        return self.arr.json
 
     @property
     def empty(self):
@@ -163,8 +172,12 @@ class XpathParse:
         return self.arr.re(query, **kwargs)
     
     @property
-    def text(self):
+    def text(self) -> str:
         return self.arr.text
+
+    @property
+    def json(self) -> dict:
+        return self.arr.json
 
     @property
     def empty(self):
