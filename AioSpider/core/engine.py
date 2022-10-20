@@ -12,13 +12,14 @@ import aiohttp
 
 import AioSpider
 from AioSpider.models import Model
-from AioSpider import settings, init_logger
+from AioSpider import settings, init_logger, GlobalConstant
 from AioSpider.downloader import Downloader
 from AioSpider.http import Request, Response
 from AioSpider.core.scheduler import Scheduler
-from AioSpider.db import SQLiteAPI, MongoAPI
+from AioSpider.db import MongoAPI
 from AioSpider.aio_db import SQLiteAPI, CSVFile, MySQLAPI
 from AioSpider.middleware import FirstMiddleware, LastMiddleware
+from AioSpider.models import DataLoader
 
 
 class Engine:
@@ -33,27 +34,23 @@ class Engine:
         self.scheduler = None
         self.middleware = None
         self.downloader = None
+        self.dataloader = None
 
         self.loop = asyncio.get_event_loop()                  # 开始事件循环
 
     def _read_settings(self):
 
-        pro_settings = import_module(str(Path().cwd().parent.name) + '.settings')
         # 项目settings
-        for i in (i for i in dir(settings)):
-            if getattr(pro_settings, i, None):
-                setattr(settings, i, getattr(pro_settings, i, None))
-            else:
-                continue
+        GlobalConstant().settings = import_module(str(Path().cwd().parent.name) + '.settings')
 
         # 爬虫settings   优先级：爬虫settings > 项目settings > 系统settings
-        for i in (i for i in dir(settings)):
+        for i in dir(GlobalConstant().settings):
             if self.spider.settings.get(i):
-                setattr(settings, i, self.spider.settings.get(i))
+                setattr(GlobalConstant().settings, i, self.spider.settings.get(i))
             else:
                 continue
 
-        return settings
+        return GlobalConstant().settings
 
     def _init_log(self):
 
@@ -177,13 +174,25 @@ class Engine:
         else:
             AioSpider.db = False
 
+    def _init_dataloader(self):
+
+        dataloader = DataLoader(getattr(self.settings, 'CAPACITY', 10000 * 10000))
+
+        # 去重
+        if getattr(self.settings, 'DATA_FILTER_ENABLE', False):
+            dataloader._load_data()
+
+        GlobalConstant().dataloader = dataloader
+        return dataloader
+
     async def _open(self):
 
         await self._init_database()
         self.pipeline = self._init_pipeline()
-        self.scheduler = await Scheduler(self.settings)
+        self.scheduler = await Scheduler()
         self.middleware = self._init_middleware()
         self.downloader = Downloader(self.middleware, self.settings)
+        self.dataloader = self._init_dataloader()
 
         self.spider.spider_open()
         for p in self.pipeline:
@@ -219,10 +228,6 @@ class Engine:
             self.loop.run_until_complete(self.execute())
         except Exception as e:
             raise e
-            # self.logger.error(str(e))
-        finally:
-            self.loop.run_until_complete(self.loop.shutdown_asyncgens())
-            self.loop.close()
 
     async def execute(self):
         """ 执行初始化start_urls里面的请求 """
@@ -391,3 +396,7 @@ class Engine:
                 await p.process_item(item)
             else:
                 p.process_item(item)
+
+    def __del__(self):
+        self.loop.run_until_complete(self.loop.shutdown_asyncgens())
+        self.loop.close()

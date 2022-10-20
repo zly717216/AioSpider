@@ -179,17 +179,16 @@ class CharField(Field):
             else:
                 raise TypeError(f'类型错误：choice 选项必须为元组或列表类型，当前类型为：{type(self.choices)}')
 
-        if not isinstance(self._value, str):
+        if self._value is None and not self.null:
+                self._value = self.default or ''
+
+        if not isinstance(self._value, (str, type(None))):
             raise ValueError(f'{self.name}值错误，value={self._value}, value必须为str类型')
 
-        if len(self._value) > 255:
+        if self._value and len(self._value) > 255:
             raise ValueError(
                 f'{self.name}值错误，value={self._value}, max_length is {self.max_length}, value超出最大长度范围'
             )
-
-        if not self._value:
-            if self.default:
-                self._value = self.default or ''
 
     def _table_sql(self):
         sql = f'{self.db_column} VARCHAR({self.max_length})'
@@ -229,11 +228,11 @@ class IntField(Field):
         if isinstance(self._value, float):
             self._value = int(self._value)
 
-        if not isinstance(self._value, int):
-            raise ValueError(f'{self.name}值错误，value={self._value}, value必须为int类型')
+        if self._value is None and not self.null:
+                self._value = self.default or 0
 
-        if not self._value:
-            self._value = self.default
+        if not isinstance(self._value, (int, type(None))):
+            raise ValueError(f'{self.name}值错误，value={self._value}, value必须为int类型')
 
     def _table_sql(self):
         sql = f'{self.db_column} INTEGER '
@@ -267,16 +266,17 @@ class FloatField(Field):
 
     def _check_value(self):
 
-        if not isinstance(self._value, float):
+        if self._value is None and not self.null:
+            self._value = self.default or float()
+
+        if not isinstance(self._value, (float, type(None))):
             if isinstance(self._value, int):
                 self._value = float(self._value)
             else:
                 raise ValueError(f'{self.name}值错误，value={self._value}, value必须为float类型')
 
-        if not self._value:
-            self._value = float(self.default)
-
-        self._value = float(Decimal(self._value).quantize(Decimal('0.000')))
+        if self._value is not None:
+            self._value = float(Decimal(self._value).quantize(Decimal('0.000')))
 
     def _table_sql(self):
         sql = f'{self.db_column} FLOAT'
@@ -414,7 +414,8 @@ class StampField(IntField):
             self._value = int(time.time())
 
         if isinstance(self._value, (float, int)):
-            if len(str(int(self._value))) != 10 and len(str(int(self._value))) != 13:
+            if len(str(int(self._value))) != len(str(int(time.time()))) and \
+                    len(str(int(self._value))) != len(str(int(time.time() * 1000))):
                 raise ValueError(f'{self.name}值错误，字段值与预期值不匹配：{self._value}，值必须为可识别的字符串时间或数字')
 
         elif isinstance(self._value, str):
@@ -452,11 +453,11 @@ class StampField(IntField):
         if not self._value:
             return
 
-        if isinstance(self._value, (int, float)) and (self._value // 10 ** 9) == 1:
+        if isinstance(self._value, (int, float)) and (self._value // len(str(int(time.time()))) ** 9) == 1:
             self._value *= 1000
             return
 
-        if isinstance(self._value, float) and (self._value // 10 ** 12) == 1:
+        if isinstance(self._value, float) and (self._value // len(str(int(time.time()))) ** 12) == 1:
             self._value = int(self._value)
             return
 
@@ -466,11 +467,11 @@ class StampField(IntField):
         if not self._value:
             return
 
-        if isinstance(self._value, (float, int)) and (self._value // 10 ** 12) == 1:
+        if isinstance(self._value, (float, int)) and (self._value // len(str(int(time.time()))) ** 12) == 1:
             self._value = int(self._value // 1000)
             return
 
-        if isinstance(self._value, float) and (self._value // 10 ** 9) == 1:
+        if isinstance(self._value, float) and (self._value // len(str(int(time.time()))) ** 9) == 1:
             self._value = int(self._value)
             return
 

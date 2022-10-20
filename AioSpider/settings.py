@@ -109,6 +109,8 @@ CACHED_REQUEST = {
     'CACHED_EXPIRE_TIME': 3600,             # 缓存时间 秒
     'CACHE_PATH': os.getenv("APPDATA")      # 数据和资源缓存路径
 }
+IGNORE_STAMP = True                         # 去重忽略时间戳
+STAMP_NAMES = []                            # 时间戳字段名，一般指请求中params、data中的参数
 
 USE_DNS_CACHE = True                        # 使用内部DNS映射缓存，用来查询DNS，使建立连接速度更快
 

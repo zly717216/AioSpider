@@ -9,6 +9,41 @@ from AioSpider import settings as sts
 sys.path.append(str(Path().cwd().parent.parent))
 
 
+class GlobalConstant:
+
+    _settings = None
+    _dataloader = None
+
+    def __new__(cls, *args, **kwargs):
+        if not hasattr(cls, '_instance'):
+            setattr(cls, '_instance', super().__new__(cls))
+        return cls._instance
+
+    @property
+    def settings(self):
+        return self._settings
+
+    @property
+    def dataloader(self):
+        return self._dataloader
+
+    @settings.getter
+    def settings(self):
+        return self._settings
+
+    @dataloader.getter
+    def dataloader(self):
+        return self._dataloader
+
+    @settings.setter
+    def settings(self, sts):
+        self._settings = sts
+
+    @dataloader.setter
+    def dataloader(self):
+        return self._dataloader
+
+
 class AioObject:
 
     async def __new__(cls, *args, **kwargs):

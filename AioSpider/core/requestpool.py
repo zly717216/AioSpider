@@ -4,14 +4,16 @@ import json
 import hashlib
 from urllib import parse
 from queue import Queue
+from pathlib import Path
 
 import pickle
 import aioredis
 from redis import ConnectionPool, Redis
 
 import AioSpider
-from AioSpider import tools, AioObject
+from AioSpider import tools, AioObject, GlobalConstant
 from AioSpider.http import Request
+from AioSpider import constants
 
 
 class OrderQueue(Queue):
@@ -63,12 +65,29 @@ class RequestBaseDB:
     failure_status = 'failure'
     success_status = 'success'
 
+    def __init__(self):
+        self._start_queue = OrderQueue()
+
     def _get_request_hash(self, request, status):
         """计算request的hash值"""
 
+        sts = GlobalConstant().settings
         url = request.url
-        params = request.params if request.params else {}
-        data = request.data if request.data else {}
+        params = request.params or {}
+        data = request.data or {}
+
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except:
+                data = {}
+
+        if hasattr(sts, 'IGNORE_STAMP') and hasattr(sts, 'STAMP_NAMES'):
+            for i in getattr(sts, 'STAMP_NAMES', []):
+                if params and params.get(i):
+                    params.pop(i)
+                if data and data.get(i):
+                    data.pop(i)
 
         item = f'{url}{params}{data}'.encode()
         req_hash = hashlib.md5(item).hexdigest()
@@ -117,6 +136,7 @@ class RequestBaseDB:
 class RequestQueueDB(RequestBaseDB):
 
     def __init__(self, qsize=0):
+        super(RequestQueueDB, self).__init__()
         self.queue = OrderQueue(qsize)
 
     async def _set_status(self, request, status):
@@ -124,56 +144,61 @@ class RequestQueueDB(RequestBaseDB):
         self.queue.put(req_hash)
 
     async def _has_success_request(self, request):
+
         req_hash = self._get_request_hash(request, self.success_status)
-        if req_hash in self.queue.queue:
-            return True
-        else:
+
+        if request.dnt_filter:
             return False
 
+        return True if req_hash in self.queue.queue or req_hash in self._start_queue.queue else False
+
     async def _has_failure_request(self, request):
+
         req_hash = self._get_request_hash(request, self.failure_status)
-        if req_hash in self.queue.queue:
-            return True
-        else:
+
+        if not request.dnt_filter:
             return False
+
+        return True if req_hash in self.queue.queue or req_hash in self._start_queue.queue else False
 
     async def _remove_request(self, request, status):
         req_hash = self._get_request_hash(request, status)
         self.queue._remove(req_hash)
         return request
 
-    def _loads_request(self, cache_dir=None, status='success'):
+    def _loads_request(self, path: Path = None, status='success'):
         """导入硬盘上的request"""
 
-        if cache_dir is None or not os.path.exists(cache_dir):
+        if path is None or not path.exists():
             return False
 
-        file_list = os.listdir(cache_dir)
-        expire_list = [eval(i.split('_')[-1].split('.')[0]) for i in file_list]
-        expire_list = [i for i in expire_list if i > time.time()]
-        expire_list.sort()
+        file_list = path.iterdir()
+        expire_list = [tools.type_converter(i.stem.split('_')[-1], to=int, force=True) for i in file_list]
+        expire = tools.max(expire_list)
 
-        if expire_list:
-            file_path = os.path.join(cache_dir, f'request_{expire_list[-1]}.pkl')
-            with open(file_path, 'rb') as f:
-                txt = pickle.load(f)
+        if expire < time.time():
+            return
 
-            for request in txt.split():
-                if status not in request:
-                    continue
-                self.queue.put(request)
+        file_path = path / f'request_{expire}.pkl'
+        with file_path.open('rb') as f:
+            txt = pickle.load(f)
 
-    async def _dumps_request(self, path=None, expire=3600):
+        for request in txt.split():
+            if status not in request:
+                continue
+            self._start_queue.put(request)
+
+    async def _dumps_request(self, path: Path = None, expire=3600):
         """将队列中的request写入硬盘"""
 
         if path is None:
             return False
 
         expire = int(time.time()) + expire
-        file_path = os.path.join(path, f'request_{expire}.pkl')
-        txt = '\n'.join([i for i in self.queue.queue])
+        file_path = path / f'request_{expire}.pkl'
+        txt = tools.join(self.queue.queue, on='\n')
 
-        with open(file_path, 'wb') as f:
+        with file_path.open('wb') as f:
             pickle.dump(txt, f)
 
         return True
@@ -275,7 +300,7 @@ class RequestRedisDB(AioObject, RequestBaseDB):
                     continue
                 self.db.zadd(x, {y: 1})
 
-    async def _dumps_request(self, path=None, expire=3600):
+    async def _dumps_request(self, path: Path = None, expire=3600):
         """将队列中的request写入硬盘"""
 
         if path is None:
@@ -288,10 +313,10 @@ class RequestRedisDB(AioObject, RequestBaseDB):
             request_list.append(f'{self.failure_status}_{i[0]}')
 
         expire = int(time.time()) + expire
-        file_path = os.path.join(path, f'request_{expire}.pkl')
-        txt = '\n'.join(request_list)
+        file_path = path / f'request_{expire}.pkl'
+        txt = tools.join(request_list, on='\n')
 
-        with open(file_path, 'wb') as f:
+        with file_path.open('wb') as f:
             pickle.dump(txt, f)
 
         await self.db.delete(self.success_status)
@@ -305,11 +330,9 @@ class RequestRedisDB(AioObject, RequestBaseDB):
 
 class RequestDB(AioObject):
 
-    async def __init__(self, settings):
+    async def __init__(self):
 
-        self.settings = settings
-
-        backend = getattr(settings, 'BACKEND_CACHE_ENGINE', {})
+        backend = getattr(GlobalConstant().settings, 'BACKEND_CACHE_ENGINE', {})
 
         if backend.get('queue', {}).get('enabled'):
             if backend.get('queue', {}).get('qsize') is None:
@@ -373,21 +396,24 @@ class RequestDB(AioObject):
         return await self.url_db.qsize()
 
     def _loads_request(self):
-        cache_settings = getattr(self.settings, 'CACHED_REQUEST', {})
+        cache_settings = getattr(GlobalConstant().settings, 'CACHED_REQUEST', {})
 
         if cache_settings and cache_settings.get('LOAD_SUCCESS', False):
-            cache_path = os.path.join(cache_settings.get('CACHE_PATH', ''), 'cache')
-            self.url_db._loads_request(cache_dir=cache_path, status='success')
+            cache_path = Path(cache_settings.get('CACHE_PATH', '')) / constants.CACHE_DIR_NAME
+            self.url_db._loads_request(path=cache_path, status='success')
 
         if cache_settings and cache_settings.get('LOAD_FAILURE', False):
-            cache_path = os.path.join(cache_settings.get('CACHE_PATH', ''), 'cache')
-            self.url_db._loads_request(cache_dir=cache_path, status='failure')
+            cache_path = Path(cache_settings.get('CACHE_PATH', '')) / constants.CACHE_DIR_NAME
+            self.url_db._loads_request(path=cache_path, status='failure')
 
     async def _dumps_request(self):
-        cache_settings = getattr(self.settings, 'CACHED_REQUEST', {})
+        cache_settings = getattr(GlobalConstant().settings, 'CACHED_REQUEST', {})
         if cache_settings:
-            expire = cache_settings.get('CACHED_EXPIRE_TIME', 3600)
-            cache_path = os.path.join(cache_settings.get('CACHE_PATH', ''), 'cache')
+            if cache_settings.get('FILTER_FOREVER', False):
+                expire = 100 * 365 * 24 * 60 * 60
+            else:
+                expire = cache_settings.get('CACHED_EXPIRE_TIME', 3600)
+            cache_path = Path(cache_settings.get('CACHE_PATH', '')) / constants.CACHE_DIR_NAME
             tools.mkdir(cache_path)
             await self.url_db._dumps_request(path=cache_path, expire=expire)
 
@@ -631,21 +657,20 @@ class FailureRequest:
 
 class RequestPool(AioObject):
 
-    async def __init__(self, settings, pool_name='AioSpider'):
+    async def __init__(self, pool_name='AioSpider'):
 
         self.name = pool_name
-        self.settings = settings
         self.waiting = WaitingRequest()
         self.pending = PendingRequest()
         self.failure = FailureRequest()
-        self.url_db = await RequestDB(settings)
+        self.url_db = await RequestDB()
 
     async def close(self):
         await self._dumps_cache()
         await self.url_db._close()
 
     def _loads_cache(self):
-        pass
+        self.url_db._loads_request()
 
     async def _dumps_cache(self):
         await self.url_db._dumps_request()
@@ -674,22 +699,22 @@ class RequestPool(AioObject):
     async def _push_to_waiting(self, request):
         """将request添加到waiting队列"""
 
-        # 1.不在waiting队列中
+        # 1.如果在waiting队列中
         if await self.waiting.has_request(request):
             AioSpider.logger.debug(f'request 已在 waiting 队列中 ---> {request}')
             return False
 
-        # 2.不在pending队列中
+        # 2.如果在pending队列中
         if await self.pending.has_request(request):
             AioSpider.logger.debug(f'request 已在 pending 队列中 ---> {request}')
             return False
 
-        # 3.不在failure队列中
+        # 3.如果在failure队列中
         if await self.failure.has_request(request):
             AioSpider.logger.debug(f'request 已在 failure 队列中 ---> {request}')
             return False
 
-        # 4.不在url_db缓存中
+        # 4.如果在url_db缓存中
         if await self.url_db._has_request(request):
             AioSpider.logger.debug(f'request 已在 url_db 队列中 ---> {request}')
             return False

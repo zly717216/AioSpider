@@ -1,6 +1,7 @@
+import re
 import time
 import asyncio
-from typing import Optional
+from typing import Optional, Iterable
 
 import aiomysql
 import AioSpider
@@ -84,9 +85,29 @@ class MySQLAPI(AioObject):
         field_str = field_str[:-1]
         valve_str = valve_str[:-1]
 
-        sql = f'INSERT INTO {table} ({field_str}) VALUES({valve_str})'
+        sql = f'INSERT IGNORE INTO {table} ({field_str}) VALUES({valve_str}) ON DUPLICATE KEY UPDATE'
 
         return sql
+
+    def _serialize_to_dict(self, data: Iterable, cur: aiomysql.Cursor) -> list:
+        """
+            将查询到的数据序列化成字典
+            @params:
+                cur: cursor 数据库游标对象
+                table: 表名
+                data： 嵌套可迭代对象
+        """
+
+        f = [i[0] for i in cur.description]
+
+        if data:
+            return [dict(zip(f, i)) for i in data]
+        else:
+            return []
+
+    def _from_sql_table(self, sql):
+        table = re.findall('table(.*?)\(', sql) or  re.findall('TABLE(.*?)\(', sql)
+        return table[0].strip() if table else None
 
     async def create_table(
             self, table: Optional[str] = None, fields: Optional[dict] = None,
@@ -99,6 +120,9 @@ class MySQLAPI(AioObject):
                 fields: 字段，如：fields={'name': 'TEXT'}
                 sql: 原始sql语句，当sql参数不为None时，table、fields无效
         """
+
+        if table is None:
+            table = self._from_sql_table(sql)
 
         if await self.table_exist(table):
             return
@@ -117,7 +141,7 @@ class MySQLAPI(AioObject):
     async def table_exist(self, table: str):
         """判断表是否存在"""
 
-        tables = await self.find_many(field='name', table='show tables;')
+        tables = await self.find_many(sql='show tables;', to_serializ=False)
         if table in [list(i.values())[0] for i in tables]:
             return True
 
@@ -131,18 +155,14 @@ class MySQLAPI(AioObject):
 
         self._last_use_time = time.time()
 
-    async def _cursor(self):
-        """创建游标"""
-        self._ensure_connected()
-        return self._db.cursor()
-
-    async def _execute(self, sql: str, values) -> None:
+    async def _execute(self, sql: str, values=None) -> None:
         """执行sql语句"""
 
+        await self._ensure_connected()
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
                 try:
-                    await cur.executemany(sql, values)or(e)
+                    await cur.execute(sql, values)
                 except aiosqlite.IntegrityError as e:
                     if 'unique' in str(e).lower():
                         AioSpider.logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
@@ -153,236 +173,45 @@ class MySQLAPI(AioObject):
                 finally:
                     await conn.commit()
 
-    async def _get(self, sql: str, *args, **kwargs) -> dict:
-        """查询一条数据"""
-
-        cursor = self._cursor()
-        try:
-            cursor.execute(sql, kwargs or args)
-            return cursor.fetchone()
-        finally:
-            cursor.close()
-            return {}
-
-    async def find_one(self, table: str, field: str, where: dict) -> dict:
-        """
-            查询一条数据
-            @params:
-                table: 表名
-                field: 查询字段
-                where: 查询条件，dict -> {字段名1: 字段值1, 字段名2: 字段值2}
-            @return: dict or None
-        """
-
-        where_str = ' and '.join([f'{k}="{v}"' for k, v in where.items()])
-        sql = f'SELECT {field} FROM {table} WHERE {field}="{where_str}"'
-
-        return self._get(sql)
-
-    async def find_many(
-            self, table: Optional[str] = None, field: Optional[Iterable] = None,
-            where: Optional[dict] = None, sql: Optional[str] = None
-    ) -> list:
-        """
-            查询多条数据
-            @params:
-                table: 表名
-                field: 查询字段
-                where: 查询条件，dict -> {字段名1: 字段值1, 字段名2: 字段值2}
-                sql: 原始sql语句，当sql参数不为None时，table、field、where无效
-        """
-
-        if sql is None:
-            sql = self._make_select_sql(table, field=field, where=where)
-
-        await self._execute(sql)
-        result = await cur.fetchall()
-
-        return self._serialize_to_dict(cur, result)
-
-    async def insert_one(self, table: str, item: dict) -> bool:
-        """
-            插入一条数据
-            @params:
-                table: 表名
-                item: 需要插入的数据，dict -> {'a': 1, 'b': 2}
-        """
-
-        values = list(item.values())
-
-        field_str = ','.join([k for k in item.keys()])
-        valve_str = ','.join(['%s'] * len(item))
-
-        sql = f'INSERT INTO {table} ({field_str}) VALUES({valve_str})'
-        try:
-            return self._execute(sql, *values)
-        except Exception as e:
-            AioSpider.logger.error(e)
-
-    async def insert_many(self, table: str, items: list, sql: Optional[str] = None):
-        """
-            插入多条数据
-            @params:
-                table: 表名
-                items: 需要插入的数据列表，list -> [{'a': 1, 'b': 2}, {'a': 3, 'b': 4}]
-                sql: 原始sql语句，当sql参数不为None时，table、items无效
-        """
-
-        if sql is None:
-            if not items:
-                return
-
-            keys = items[0].keys()
-            values = set((tuple(i.values()) for i in items))
-            sql = f'INSERT INTO {table} ({",".join([i for i in keys])}) VALUES (' + '%s,' * len(keys)
-            sql = sql[:-1] + ')'
-
-            await self._execute(sql, values)
-        else:
-            await self._execute(sql)
-
-    async def update(self, table: str, item: dict, where: dict) -> None:
-        """
-            更新数据
-            @params:
-                table: 表名
-                item: 需要插入的数据，dict -> {'a': 1, 'b': 2}
-                where: 查询条件，dict -> {字段名1: 字段值1, 字段名2: 字段值2}
-        """
-
-        upsets = ','.join([f'{k}=%s' for k in item.keys()])
-        values = [v for v in item.values()]
-        where_str = ' and '.join([f'{k}="{v}"' for k, v in where])
-
-        sql = f'UPDATE {table} SET {upsets} WHERE {where_str}'
-
-        self._execute(sql, *values)
-
-    def close(self):
-        """关闭数据库连接"""
-
-        if getattr(self, "_db", None) is not None:
-            # 连接池关闭
-            self._pool.close()
-            # 等待释放和关闭所有已获取连接的协同程序。应该在close（）之后调用，以等待实际的池关闭
-            asyncio.create_task(self._pool.wait_closed())
-
-
-import asyncio
-from typing import Optional, Iterable
-
-import aiosqlite
-import AioSpider
-from AioSpider import AioObject
-
-
-class SQLiteAPI(AioObject):
-    """sqlite 增删改查API"""
-
-    engine = 'sqlite'
-
-    async def __init__(self, path, timeout=None):
-        self.conn = await aiosqlite.connect(database=path, iter_chunk_size=64, timeout=timeout)
-
-    async def _execute(self, sql: str, *args, **kwargs):
+    async def _executemany(self, sql: str, values=None) -> None:
         """执行sql语句"""
 
-        async with self.conn.cursor() as cur:
-            try:
-                await cur.execute(sql, kwargs or args)
-            except aiosqlite.IntegrityError as e:
-                if 'unique' in str(e).lower():
-                    AioSpider.logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
-                else:
+        await self._ensure_connected()
+        async with self._pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.executemany(sql, values)
+                except aiomysql.IntegrityError as e:
+                    if 'unique' in str(e).lower():
+                        AioSpider.logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
+                    else:
+                        AioSpider.logger.error(e)
+                except aiomysql.DataError as e:
+                    AioSpider.logger.error(f'数据错误：{e}')
+                except Exception as e:
                     AioSpider.logger.error(e)
-            except Exception as e:
-                AioSpider.logger.error(e)
-            finally:
-                await self.commit()
+                finally:
+                    await conn.commit()
 
-    def _make_select_sql(self, table: str, field: Optional[Iterable] = None, where: Optional[dict] = None) -> str:
-        """
-            生成查询语句
-            @params:
-                table: 表名
-                field: 查询字段
-                where: 查询条件，dict -> {字段名1: 字段值1, 字段名2: 字段值2}
-        """
+    async def _get(self, sql: str, values=None, to_serializ=True) -> dict:
+        """查询一条数据"""
 
-        if field is None:
-            sql = f'SELECT * FROM {table}'
-        elif isinstance(field, str):
-            sql = f'SELECT {field} FROM {table}'
-        elif isinstance(field, list):
-            sql = f'SELECT {",".join(field)} FROM {table}'
-        else:
-            raise TypeError(f'field 参数类型错误，当前类型为：{type(field)}')
-
-        if where is None:
-            return sql
-
-        where_list = []
-        for k, v in where.items():
-            if isinstance(v, str):
-                where_list.append(f'{k}="{v}"')
-            else:
-                where_list.append(f'{k}={v}')
-
-        sql += ' WHERE '
-        sql += ' and '.join(where_list)
-
-        return sql
-
-    def _make_insert_sql(self, table: str, item: dict):
-        """
-            插入一条数据
-            @params:
-                table: 表名
-                item: 需要插入的数据，dict -> {'a': 1, 'b': 2}
-        """
-
-        field_str = valve_str = ''
-        for k in item:
-            field_str += k + ','
-            if isinstance(item[k], str):
-                valve_str += f'"{item[k]}",'
-            else:
-                valve_str += f'{item[k]},'
-
-        field_str = field_str[:-1]
-        valve_str = valve_str[:-1]
-
-        sql = f'INSERT INTO {table} ({field_str}) VALUES({valve_str})'
-
-        return sql
-
-    def _serialize_to_dict(self, cur, data: Iterable) -> list:
-        """
-            将查询到的数据序列化成字典
-            @params:
-                cur: cursor 数据库游标对象
-                data： 嵌套可迭代对象
-        """
-
-        f = [i[0] for i in cur.description]
-
-        if data:
-            return [dict(zip(f, i)) for i in data]
-        else:
-            return []
-
-    async def table_exist(self, table: str):
-        """判断表是否存在"""
-
-        tables = await self.find_many(field='name', table='sqlite_master', where={'type': 'table'})
-        if table in [list(i.values())[0] for i in tables]:
-            return True
-
-        return False
+        await self._ensure_connected()
+        async with self._pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.execute(sql, values)
+                except Exception as e:
+                    AioSpider.logger.error(e)
+                finally:
+                    data = await cur.fetchall()
+                    if to_serializ:
+                        data = self._serialize_to_dict(data, cur=cur)
+                    return data
 
     async def find_one(
             self, table: Optional[str] = None, field: Optional[Iterable] = None,
-            where: Optional[dict] = None, sql: Optional[str] = None
+            where: Optional[dict] = None, sql: Optional[str] = None, to_serializ=True
     ) -> list:
         """
             查询一条数据
@@ -391,19 +220,17 @@ class SQLiteAPI(AioObject):
                 field: 查询字段
                 where: 查询条件，dict -> {字段名1: 字段值1, 字段名2: 字段值2}
                 sql: 原始sql语句，当sql参数不为None时，table、field、where无效
+                to_serializ: 是否序列化
         """
 
         if sql is None:
             sql = self._make_select_sql(table, field=field, where=where)
 
-        async with self.conn.cursor() as cur:
-            await cur.execute(sql)
-            result = await cur.fetchone()
-            return self._serialize_to_dict(cur, result)
+        return await self._get(sql, to_serializ=to_serializ)
 
     async def find_many(
             self, table: Optional[str] = None, field: Optional[Iterable] = None,
-            where: Optional[dict] = None, sql: Optional[str] = None
+            where: Optional[dict] = None, sql: Optional[str] = None, to_serializ=True
     ) -> list:
         """
             查询多条数据
@@ -412,16 +239,13 @@ class SQLiteAPI(AioObject):
                 field: 查询字段
                 where: 查询条件，dict -> {字段名1: 字段值1, 字段名2: 字段值2}
                 sql: 原始sql语句，当sql参数不为None时，table、field、where无效
+                to_serializ: 是否序列化
         """
 
         if sql is None:
             sql = self._make_select_sql(table, field=field, where=where)
 
-        async with self.conn.cursor() as cur:
-            await cur.execute(sql)
-            result = await cur.fetchall()
-
-            return self._serialize_to_dict(cur, result)
+        return await self._get(sql, to_serializ=to_serializ)
 
     async def insert_one(self, table: str, item: dict, sql: Optional[str] = None):
         """
@@ -451,50 +275,36 @@ class SQLiteAPI(AioObject):
                 return
 
             keys = items[0].keys()
-            values = iter(set(tuple(i.values()) for i in items))
-            sql = f'INSERT INTO {table} ({",".join([i for i in keys])}) VALUES (' + '?,' * len(keys)
+            values = set((tuple(i.values()) for i in items))
+            sql = f'INSERT INTO {table} ({",".join([i for i in keys])}) VALUES (' + '%s,' * len(keys)
             sql = sql[:-1] + ')'
 
-            async with self.conn.cursor() as cur:
-                try:
-                    await cur.executemany(sql, values)
-                except aiosqlite.IntegrityError as e:
-                    if 'unique' in str(e).lower():
-                        AioSpider.logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
-                    else:
-                        AioSpider.logger.error(e)
-                except Exception as e:
-                    AioSpider.logger.error(e)
-                finally:
-                    await self.commit()
+            await self._executemany(sql, values)
         else:
             await self._execute(sql)
 
-    def remove_one(self): ...
+    async def update(self, table: str, item: dict, where: dict) -> None:
+        """
+            更新数据
+            @params:
+                table: 表名
+                item: 需要插入的数据，dict -> {'a': 1, 'b': 2}
+                where: 查询条件，dict -> {字段名1: 字段值1, 字段名2: 字段值2}
+        """
 
-    def remove_many(self): ...
+        upsets = ','.join([f'{k}=%s' for k in item.keys()])
+        values = [v for v in item.values()]
+        where_str = ' and '.join([f'{k}="{v}"' for k, v in where])
 
-    async def modify_one_smart(self, table, items: dict, where):
+        sql = f'UPDATE {table} SET {upsets} WHERE {where_str}'
 
-        sql = f"UPDATE {table} SET "
-
-        for key in items.keys():
-            sql += f'{key}="{items[key]}",' if isinstance(items[key], str) else f'{key}={items[key]},'
-
-        sql = sql[:-1] + f" where {where}={items[where]}"
-
-        await self._execute(sql)
-
-    def modify_many(self): ...
-
-    async def commit(self):
-        await self.conn.commit()
+        self._execute(sql, *values)
 
     def close(self):
-        asyncio.create_task(self.conn.close())
+        """关闭数据库连接"""
 
-
-if __name__ == '__main__':
-    db = MySQLAPI(
-        host='101.42.138.122', database='wenzz', user='root', password='717216'
-    )
+        if getattr(self, "_pool", None) is not None:
+            # 连接池关闭
+            self._pool.close()
+            # 等待释放和关闭所有已获取连接的协同程序。应该在close（）之后调用，以等待实际的池关闭
+            asyncio.create_task(self._pool.wait_closed())

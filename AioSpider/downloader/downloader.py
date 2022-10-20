@@ -45,8 +45,11 @@ class DownloadHandler:
                 url=str(response.url), status=response.status, headers=response.headers,
                 text=content, request=request
             )
+
+            # 将request的属性绑定到response实例上
             for attr in request.kwargs:
                 setattr(res, attr, request.kwargs[attr])
+
             return res
         except Exception as e:
             return e

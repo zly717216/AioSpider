@@ -1,3 +1,4 @@
+import re
 import asyncio
 from typing import Optional, Iterable
 
@@ -82,7 +83,7 @@ class SQLiteAPI(AioObject):
         field_str = field_str[:-1]
         valve_str = valve_str[:-1]
 
-        sql = f'INSERT INTO {table} ({field_str}) VALUES({valve_str})'
+        sql = f'INSERT IGNORE INTO {table} ({field_str}) VALUES({valve_str}) ON DUPLICATE KEY UPDATE'
 
         return sql
 
@@ -100,6 +101,10 @@ class SQLiteAPI(AioObject):
             return [dict(zip(f, i)) for i in data]
         else:
             return []
+
+    def _from_sql_table(self, sql):
+        table = re.findall('table(.*?)\(', sql) or  re.findall('TABLE(.*?)\(', sql)
+        return table[0].strip() if table else None
 
     async def table_exist(self, table: str):
         """判断表是否存在"""
@@ -121,6 +126,12 @@ class SQLiteAPI(AioObject):
                 fields: 字段，如：fields={'name': 'TEXT'}
                  sql: 原始sql语句，当sql参数不为None时，table、fields无效
         """
+
+        if table is None:
+            table = self._from_sql_table(sql)
+
+        if await self.table_exist(table):
+            return
 
         if sql is None:
             sql = f'CREATE TABLE {table} ('

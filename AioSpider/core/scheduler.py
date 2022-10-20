@@ -6,8 +6,8 @@ from AioSpider.core.requestpool import RequestPool
 
 class Scheduler(AioObject):
 
-    async def __init__(self, settings):
-        self._request_pool = await RequestPool(settings)
+    async def __init__(self):
+        self._request_pool = await RequestPool()
 
     @property
     def failure_pool(self):

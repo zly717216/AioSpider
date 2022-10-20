@@ -11,7 +11,7 @@ class MySQLPipeline(Pipeline):
     model = None
 
     def __init__(self, *args, **kwargs):
-        super(SqlitePipeline, self).__init__(*args, **kwargs)
+        super(MySQLPipeline, self).__init__(*args, **kwargs)
         self._models = import_module(os.getcwd().split('\\')[-1] + '.models')
 
     def spider_open(self):

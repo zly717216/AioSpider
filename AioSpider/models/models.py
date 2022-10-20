@@ -4,7 +4,17 @@ import asyncio
 
 import AioSpider
 from .field import Field, AutoIntField
-from AioSpider import tools
+from AioSpider import tools, GlobalConstant
+from AioSpider.filter import BloomFilter
+
+
+class DataLoader:
+
+    def __init__(self, capacity):
+        self._data_bloom = BloomFilter(capacity=capacity)
+
+    def _load_data(self):
+        sts = GlobalConstant().settings
 
 
 class Container:
@@ -213,7 +223,7 @@ class Model:
             self._save_mongo()
 
     @classmethod
-    async def close(cls):
+    async def _close(cls):
         pass
 
 

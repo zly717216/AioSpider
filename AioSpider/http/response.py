@@ -25,7 +25,6 @@ class Response(object):
             self.request = request
         self._cached_selector = None
         self._cached_xpath = None
-        self.meta = request.meta
 
     @property
     def selector(self):

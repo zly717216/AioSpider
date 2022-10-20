@@ -1,11 +1,13 @@
 import os
 import re
 import json
+import time
 import hashlib
-from typing import Union, Any
+from typing import Union, Any, Iterable
 from datetime import datetime
 
 import pydash
+import numpy as np
 from pandas import to_datetime, Timestamp
 
 
@@ -17,7 +19,6 @@ def mkdir(path):
 
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
-        print(f'{path} 目录创建成功')
 
 
 def str2num(char: str, multi: int = 1, force: bool = False, _type=int) -> Union[int, float, str]:
@@ -201,7 +202,7 @@ class TimeConverter:
         return dt.value // pow(10, 6) - 8 * 60 * 60 * 1000 if millisecond else dt.value // pow(10, 9) - 8 * 60 * 60
 
     @classmethod
-    def stamp_to_strtime(self, time_stamp: Union[int, float], format='%Y-%m-%d %H:%M:%S') -> Union[str, None]:
+    def stamp_to_strtime(self, time_stamp: Union[int, float, str], format='%Y-%m-%d %H:%M:%S') -> Union[str, None]:
         """
         时间戳转时间字符串，支持秒级（10位）和毫秒级（13位）时间戳自动判断
         :param time_stamp: 时间戳 ex: 秒级：1658220419、1658220419.111222 毫秒级：1658220419111、1658220419111。222
@@ -209,15 +210,19 @@ class TimeConverter:
         :return: 时间字符串, ex: 2022-07-19 16:46:59   东八区时间
         """
 
-        if len(str(time_stamp).split('.')[0]) == 10:
+        if isinstance(time_stamp, str) and time_stamp.isdigit():
+            time_stamp = float(time_stamp)
+
+        if len(str(time_stamp).split('.')[0]) <= len(str(int(time.time()))):
             dt = to_datetime(time_stamp, unit='s', origin=Timestamp('1970-01-01 08:00:00'))
             return dt.to_pydatetime().strftime(format)
 
-        if len(str(time_stamp).split('.')[0]) == 13:
+        elif len(str(time_stamp).split('.')[0]) <= len(str(int(time.time() * 1000))):
             dt = to_datetime(time_stamp, unit='ms', origin=Timestamp('1970-01-01 08:00:00'))
             return dt.to_pydatetime().strftime(format)
 
-        return None
+        else:
+            return None
 
     @classmethod
     def strtime_to_time(self, str_time: str) -> str:
@@ -238,12 +243,65 @@ class TimeConverter:
         :return: 时间字符串, ex: 2022-07-19 16:46:59   东八区时间
         """
 
-        if len(str(time_stamp).split('.')[0]) == 10:
+        if len(str(time_stamp).split('.')[0]) <= len(str(int(time.time()))):
             dt = to_datetime(time_stamp, unit='s', origin=Timestamp('1970-01-01 08:00:00'))
             return dt.to_pydatetime()
 
-        if len(str(time_stamp).split('.')[0]) == 13:
+        elif len(str(time_stamp).split('.')[0]) <= len(str(int(time.time() * 1000))):
             dt = to_datetime(time_stamp, unit='ms', origin=Timestamp('1970-01-01 08:00:00'))
             return dt.to_pydatetime()
 
-        return None
+        else:
+            return None
+
+
+def join(data: Iterable, on: str = '') -> str:
+    """
+    拼接字符串
+    :param data: 可迭代对象，若data中的元素有非字符串类型的，会被强转
+    :param on: 连接符
+    :return: 拼接后的字符串
+    """
+    for i in data:
+        if isinstance(i, str):
+            continue
+        i = str(i)
+    return on.join(data)
+
+
+def max(arry: Iterable, default=0):
+    """
+    求最大值
+    :param arry: 数组，如果传入可迭代对象，会强转成数组
+    :param default: 默认值
+    :return: np.max
+    """
+
+    try:
+        arry = list(arry)
+    except:
+        return default
+
+    if not arry:
+        return default
+
+    return np.array(arry).max()
+
+
+def max(arry: Iterable, default=0):
+    """
+    求最小值
+    :param arry: 数组，如果传入可迭代对象，会强转成数组
+    :param default: 默认值
+    :return: np.min
+    """
+
+    try:
+        arry = list(arry)
+    except:
+        return default
+
+    if not arry:
+        return default
+
+    return np.array(arry).min()
