@@ -12,7 +12,7 @@ class Field:
             self, name: str, max_length: Optional[int] = None, unique: bool = False,
             blank: bool = True, null: bool = True, db_index: bool = False, db_column: Optional[str] = None,
             default: Union[str, int, float, None] = None, choices: Union[tuple, list, None] = None, validators=None,
-            is_save: bool = True
+            is_save: bool = True, dnt_filter: bool = False
     ):
         self.name = name
         self.max_length = max_length or 255
@@ -24,6 +24,7 @@ class Field:
         self.db_index = db_index
         self.db_column = db_column or name
         self.is_save = is_save
+        self.dnt_filter = dnt_filter
 
         self._validators = validators or []
         self._message = []
@@ -126,12 +127,12 @@ class CharField(Field):
 
     def __init__(
             self, name, max_length=255, unique=False, blank=True, null=True, default=None,
-            choices=None, validators=None, db_column=None, is_save=True
+            choices=None, validators=None, db_column=None, is_save=True, dnt_filter=False
     ):
         super(CharField, self).__init__(
             name=name, max_length=max_length, unique=unique, blank=blank, null=null,
             db_index=False, default=default, choices=choices, db_column=db_column,
-            validators=validators, is_save=is_save
+            validators=validators, is_save=is_save, dnt_filter=dnt_filter
         )
         self._value = ''
         self._check(f'{name}(CharField)')
@@ -210,12 +211,12 @@ class IntField(Field):
 
     def __init__(
             self, name, blank=True, default=0, null=True, validators=None,
-            db_column=None, is_save=True, db_index=False, unique=False
+            db_column=None, is_save=True, db_index=False, unique=False, dnt_filter=False
     ):
         super(IntField, self).__init__(
             name=name, max_length=None, unique=unique, blank=blank, null=null,
             db_index=db_index, default=default, choices=None, db_column=db_column,
-            validators=validators, is_save=is_save
+            validators=validators, is_save=is_save, dnt_filter=dnt_filter
         )
         self._value = 0
         self._check(f'{name}(IntField)')
@@ -251,12 +252,12 @@ class FloatField(Field):
 
     def __init__(
             self, name, blank=True, null=True, default=0.0, validators=None,
-            db_column=None, is_save=True
+            db_column=None, is_save=True, dnt_filter=False
     ):
         super(FloatField, self).__init__(
             name=name, max_length=None, unique=False, blank=blank, null=null,
             db_index=False, default=default, choices=None, db_column=db_column,
-            validators=validators, is_save=is_save
+            validators=validators, is_save=is_save, dnt_filter=dnt_filter
         )
         self._value = 0
         self._check(f'{name}(FloatField)')
@@ -293,12 +294,12 @@ class FloatField(Field):
 
 class BoolField(Field):
 
-    def __init__(self, name, default=False, db_column=None, is_save=True):
+    def __init__(self, name, default=False, db_column=None, is_save=True, dnt_filter=False):
 
         super(BoolField, self).__init__(
             name=name, max_length=None, unique=False, blank=False, null=False,
             db_index=False, default=default, choices=None, db_column=db_column,
-            validators=None, is_save=is_save
+            validators=None, is_save=is_save, dnt_filter=dnt_filter
         )
         self._value = default
         self._check(f'{name}(BoolField)')
@@ -331,11 +332,12 @@ class AutoIntField(IntField):
 
     def __init__(
             self, name, sep=1, validators=None, db_column=None, is_save=True, db_index=False,
-            auto_field='AUTOINCREMENT'
+            auto_field='AUTOINCREMENT', dnt_filter=True
     ):
         super(AutoIntField, self).__init__(
             name=name, blank=False, default=1, null=False, validators=validators,
-            db_column=db_column, is_save=is_save, db_index=db_index, unique=True
+            db_column=db_column, is_save=is_save, db_index=db_index, unique=True,
+            dnt_filter=dnt_filter
         )
         self.sep = sep
         self.auto_field = auto_field
@@ -368,12 +370,12 @@ class StampField(IntField):
     def __init__(
             self, name, blank=True, null=True, validators=None,
             db_column=None, is_save=True, db_index=False, unique=False,
-            to_second=True, to_millisecond=False
+            to_second=True, to_millisecond=False, dnt_filter=True
     ):
         super(StampField, self).__init__(
             name=name, unique=unique, blank=blank, null=null,
             db_index=db_index, default=None, db_column=db_column,
-            validators=validators, is_save=is_save
+            validators=validators, is_save=is_save, dnt_filter=dnt_filter
         )
         self._value = 0
         self._check(f'{name}(IntField)')
@@ -511,11 +513,11 @@ class StampField(IntField):
 
 class DateTimeField(Field):
 
-    def __init__(self, name, db_column=None):
+    def __init__(self, name, db_column=None, dnt_filter=True):
         super(DateTimeField, self).__init__(
             name=name, max_length=None, unique=False, blank=False, null=False,
             db_index=False, default=None, choices=None, db_column=db_column,
-            validators=None, is_save=True
+            validators=None, is_save=True, dnt_filter=dnt_filter
         )
         self._value = datetime.now()
         self._check(f'{name}(DateTimeField)')
@@ -552,12 +554,12 @@ class DateTimeField(Field):
 class TextField(Field):
 
     def __init__(
-            self, name, default=None, validators=None, db_column=None, is_save=True
+            self, name, default=None, validators=None, db_column=None, is_save=True, dnt_filter=False
     ):
         super(TextField, self).__init__(
             name=name, max_length=None, unique=False, blank=True, null=True,
             db_index=False, default=default, choices=None, db_column=db_column,
-            validators=validators, is_save=is_save
+            validators=validators, is_save=is_save, dnt_filter=dnt_filter
         )
         self._value = ''
         self._check(f'{name}(TextField)')

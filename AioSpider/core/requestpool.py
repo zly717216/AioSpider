@@ -181,7 +181,10 @@ class RequestQueueDB(RequestBaseDB):
 
         file_path = path / f'request_{expire}.pkl'
         with file_path.open('rb') as f:
-            txt = pickle.load(f)
+            try:
+                txt = pickle.load(f)
+            except:
+                return
 
         for request in txt.split():
             if status not in request:
@@ -196,7 +199,7 @@ class RequestQueueDB(RequestBaseDB):
 
         expire = int(time.time()) + expire
         file_path = path / f'request_{expire}.pkl'
-        txt = tools.join(self.queue.queue, on='\n')
+        txt = tools.join(self.queue.queue.union(self._start_queue.queue), on='\n')
 
         with file_path.open('wb') as f:
             pickle.dump(txt, f)

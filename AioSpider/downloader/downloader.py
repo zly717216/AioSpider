@@ -2,11 +2,11 @@ import random
 
 import aiohttp
 
-import AioSpider
+from AioSpider import GlobalConstant
 from AioSpider.http import Request, Response
 
 
-session = AioSpider.session
+session = GlobalConstant().session
 
 
 class DownloadHandler:
@@ -18,7 +18,7 @@ class DownloadHandler:
 
         global session
         if session is None:
-            session = AioSpider.session
+            session = GlobalConstant().session
 
         kwargs = {
             'headers': request.headers,

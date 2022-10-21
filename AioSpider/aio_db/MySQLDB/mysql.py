@@ -89,22 +89,6 @@ class MySQLAPI(AioObject):
 
         return sql
 
-    def _serialize_to_dict(self, data: Iterable, cur: aiomysql.Cursor) -> list:
-        """
-            将查询到的数据序列化成字典
-            @params:
-                cur: cursor 数据库游标对象
-                table: 表名
-                data： 嵌套可迭代对象
-        """
-
-        f = [i[0] for i in cur.description]
-
-        if data:
-            return [dict(zip(f, i)) for i in data]
-        else:
-            return []
-
     def _from_sql_table(self, sql):
         table = re.findall('table(.*?)\(', sql) or  re.findall('TABLE(.*?)\(', sql)
         return table[0].strip() if table else None
@@ -141,7 +125,7 @@ class MySQLAPI(AioObject):
     async def table_exist(self, table: str):
         """判断表是否存在"""
 
-        tables = await self.find_many(sql='show tables;', to_serializ=False)
+        tables = await self.find_many(sql='show tables;')
         if table in [list(i.values())[0] for i in tables]:
             return True
 
@@ -193,7 +177,7 @@ class MySQLAPI(AioObject):
                 finally:
                     await conn.commit()
 
-    async def _get(self, sql: str, values=None, to_serializ=True) -> dict:
+    async def _get(self, sql: str, values=None) -> dict:
         """查询一条数据"""
 
         await self._ensure_connected()
@@ -204,14 +188,11 @@ class MySQLAPI(AioObject):
                 except Exception as e:
                     AioSpider.logger.error(e)
                 finally:
-                    data = await cur.fetchall()
-                    if to_serializ:
-                        data = self._serialize_to_dict(data, cur=cur)
-                    return data
+                    return await cur.fetchall()
 
     async def find_one(
             self, table: Optional[str] = None, field: Optional[Iterable] = None,
-            where: Optional[dict] = None, sql: Optional[str] = None, to_serializ=True
+            where: Optional[dict] = None, sql: Optional[str] = None
     ) -> list:
         """
             查询一条数据
@@ -220,17 +201,16 @@ class MySQLAPI(AioObject):
                 field: 查询字段
                 where: 查询条件，dict -> {字段名1: 字段值1, 字段名2: 字段值2}
                 sql: 原始sql语句，当sql参数不为None时，table、field、where无效
-                to_serializ: 是否序列化
         """
 
         if sql is None:
             sql = self._make_select_sql(table, field=field, where=where)
 
-        return await self._get(sql, to_serializ=to_serializ)
+        return await self._get(sql)
 
     async def find_many(
             self, table: Optional[str] = None, field: Optional[Iterable] = None,
-            where: Optional[dict] = None, sql: Optional[str] = None, to_serializ=True
+            where: Optional[dict] = None, sql: Optional[str] = None
     ) -> list:
         """
             查询多条数据
@@ -245,7 +225,7 @@ class MySQLAPI(AioObject):
         if sql is None:
             sql = self._make_select_sql(table, field=field, where=where)
 
-        return await self._get(sql, to_serializ=to_serializ)
+        return await self._get(sql)
 
     async def insert_one(self, table: str, item: dict, sql: Optional[str] = None):
         """
@@ -275,7 +255,7 @@ class MySQLAPI(AioObject):
                 return
 
             keys = items[0].keys()
-            values = set((tuple(i.values()) for i in items))
+            values = iter(set((tuple(i.values()) for i in items)))
             sql = f'INSERT INTO {table} ({",".join([i for i in keys])}) VALUES (' + '%s,' * len(keys)
             sql = sql[:-1] + ')'
 

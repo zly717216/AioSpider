@@ -4,6 +4,7 @@ import os
 import abc
 import six
 import logging
+import logging.handlers
 import warnings
 from logging import Formatter
 import threading
@@ -405,12 +406,12 @@ class Logger:
         elif not self.when:
             self.filehandler = logging.handlers.RotatingFileHandler(
                 self.file_path, self.file_mode,
-                self.limit, self.backup_count
+                self.limit, self.backup_count, encoding=self.encoding
             )
 
         else:
             self.filehandler = logging.handlers.TimedRotatingFileHandler(
-                self.file_path, self.when, 1, self.backup_count
+                self.file_path, self.when, 1, self.backup_count, encoding=self.encoding
             )
 
         formatter = BasicFormatter(self.file_fmt, self.file_date_fmt)

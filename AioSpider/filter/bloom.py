@@ -165,8 +165,8 @@ class BloomFilter(object):
         return self.count
 
     def add(self, key, skip_check=False):
-        """ Adds a key to this bloom filter. If the key already exists in this
-        filter it will return True. Otherwise False.
+        """
+        Adds a key to this bloom filter. If the key already exists in this filter it will return True. Otherwise False.
 
         >>> b = BloomFilter(capacity=100)
         >>> b.add("hello")
@@ -175,18 +175,21 @@ class BloomFilter(object):
         True
         >>> b.count
         1
-
         """
+
         bitarray = self.bitarray
         bits_per_slice = self.bits_per_slice
         hashes = self.make_hashes(key)
         found_all_bits = True
+
         if self.count > self.capacity:
             raise IndexError("BloomFilter is at capacity")
+
         offset = 0
         for k in hashes:
             if not skip_check and found_all_bits and not bitarray[offset + k]:
                 found_all_bits = False
+
             self.bitarray[offset + k] = True
             offset += bits_per_slice
 
@@ -198,6 +201,12 @@ class BloomFilter(object):
             return False
         else:
             return True
+
+    def add_many(self, keys: list, is_hash=False, skip_check=False):
+        for k in keys:
+            if is_hash:
+                k = hashlib.md5(str(k).encode()).hexdigest()
+            self.add(k, skip_check=skip_check)
 
     def copy(self):
         """Return a copy of this bloom filter.
@@ -211,8 +220,7 @@ class BloomFilter(object):
         a new bloom filter object."""
         if self.capacity != other.capacity or \
             self.error_rate != other.error_rate:
-            raise ValueError("Unioning filters requires both filters to have \
-both the same capacity and error rate")
+            raise ValueError("Unioning filters requires both filters to have both the same capacity and error rate")
         new_bloom = self.copy()
         new_bloom.bitarray = new_bloom.bitarray | other.bitarray
         return new_bloom
@@ -225,8 +233,7 @@ both the same capacity and error rate")
         a new bloom filter object."""
         if self.capacity != other.capacity or \
             self.error_rate != other.error_rate:
-            raise ValueError("Intersecting filters requires both filters to \
-have equal capacity and error rate")
+            raise ValueError("Intersecting filters requires both filters to \have equal capacity and error rate")
         new_bloom = self.copy()
         new_bloom.bitarray = new_bloom.bitarray & other.bitarray
         return new_bloom

@@ -12,7 +12,6 @@ import aiohttp
 
 import AioSpider
 from AioSpider.models import Model
-from AioSpider import settings, init_logger, GlobalConstant
 from AioSpider.downloader import Downloader
 from AioSpider.http import Request, Response
 from AioSpider.core.scheduler import Scheduler
@@ -20,6 +19,7 @@ from AioSpider.db import MongoAPI
 from AioSpider.aio_db import SQLiteAPI, CSVFile, MySQLAPI
 from AioSpider.middleware import FirstMiddleware, LastMiddleware
 from AioSpider.models import DataLoader
+from AioSpider import settings, init_logger, GlobalConstant, tools
 
 
 class Engine:
@@ -41,16 +41,20 @@ class Engine:
     def _read_settings(self):
 
         # 项目settings
-        GlobalConstant().settings = import_module(str(Path().cwd().parent.name) + '.settings')
+        sts = import_module(str(Path().cwd().parent.name) + '.settings')
 
         # 爬虫settings   优先级：爬虫settings > 项目settings > 系统settings
-        for i in dir(GlobalConstant().settings):
+        for i in dir(sts):
             if self.spider.settings.get(i):
-                setattr(GlobalConstant().settings, i, self.spider.settings.get(i))
+                setattr(sts, i, self.spider.settings.get(i))
             else:
                 continue
 
-        return GlobalConstant().settings
+        if not getattr(sts, 'AIOSPIDER_PATH'):
+            raise Exception('settings 中未配置工作路径')
+
+        GlobalConstant().settings = sts
+        return sts
 
     def _init_log(self):
 
@@ -62,6 +66,11 @@ class Engine:
         if not sts['LOG_NAME']:
             warnings.warn("logger的'name'属性必须为非空str类型，日志名称设置无效，将使用默认名'aioSpider'作为日志名称")
             sts['LOG_NAME'] = self.spider.name
+
+        if sts.get('LOG_IS_FILE'):
+            if not sts.get('LOG_PATH'):
+                sts['LOG_PATH'] = str(self.settings.AIOSPIDER_PATH / f'log{self.spider.name}.log')
+            tools.mkdir(sts['LOG_PATH'])
 
         logger = init_logger(sts)
         AioSpider.logger = logger
@@ -81,6 +90,7 @@ class Engine:
             x = import_module('.'.join(py))
             pp.append((eval(f'x.{c}'), pipelines[p]))
 
+        GlobalConstant()._pipelines = [p[0] for p in sorted(pp, key=lambda k: k[1])]
         return [p[0](self.spider) for p in sorted(pp, key=lambda k: k[1])]
 
     def _init_middleware(self):
@@ -126,7 +136,7 @@ class Engine:
             path = sq_path / sq_db
             sq_timeout = db_engine['SQLITE']['SQLITE_TIMEOUT']
 
-            AioSpider.db = await SQLiteAPI(path, sq_timeout)
+            GlobalConstant.database = await SQLiteAPI(path, sq_timeout)
             self.logger.info(f"SQLite数据库已启动：\n{pformat(db_engine['SQLITE'])}")
 
         elif db_engine['CSVFile']['ENABLE']:
@@ -138,7 +148,7 @@ class Engine:
             if not csv_path.exists():
                 csv_path.mkdir(parents=True, exist_ok=True)
 
-            AioSpider.db = CSVFile(path=csv_path, encoding=encoding, write_mode=write_mode)
+            GlobalConstant.database = CSVFile(path=csv_path, encoding=encoding, write_mode=write_mode)
             self.logger.info(f"CSVFile数据库已启动：\n{pformat(db_engine['CSVFile'])}")
 
         elif db_engine['MYSQL']['ENABLE']:
@@ -152,7 +162,7 @@ class Engine:
             my_timeout = db_engine['MYSQL']['MYSQL_CONNECT_TIMEOUT']
             my_time_zone = db_engine['MYSQL']['MYSQL_TIME_ZONE']
 
-            AioSpider.db = await MySQLAPI(
+            GlobalConstant.database = await MySQLAPI(
                 host=my_host, port=my_port, db=my_db, user=my_user, password=my_pwd,
                 connect_timeout=my_timeout, charset=my_charset, time_zone=my_time_zone
             )
@@ -166,23 +176,23 @@ class Engine:
             mo_user = db_engine['MONGODB']['MONGO_USER_NAME']
             mo_pwd = db_engine['MONGODB']['MONGO_USER_PWD']
 
-            AioSpider.db = MongoAPI(
+            GlobalConstant.database = MongoAPI(
                 host=mo_host, port=mo_port, db=mo_db, username=mo_user, password=mo_pwd
             )
             self.logger.info(f"MongoDB数据库已启动：\n{pformat(db_engine['MONGODB'])}")
 
         else:
-            AioSpider.db = False
+            return None
 
-    def _init_dataloader(self):
+    async def _init_dataloader(self):
 
         dataloader = DataLoader(getattr(self.settings, 'CAPACITY', 10000 * 10000))
+        GlobalConstant().dataloader = dataloader
 
         # 去重
         if getattr(self.settings, 'DATA_FILTER_ENABLE', False):
-            dataloader._load_data()
+            await dataloader._load_data()
 
-        GlobalConstant().dataloader = dataloader
         return dataloader
 
     async def _open(self):
@@ -192,7 +202,7 @@ class Engine:
         self.scheduler = await Scheduler()
         self.middleware = self._init_middleware()
         self.downloader = Downloader(self.middleware, self.settings)
-        self.dataloader = self._init_dataloader()
+        self.dataloader = await self._init_dataloader()
 
         self.spider.spider_open()
         for p in self.pipeline:
@@ -214,8 +224,8 @@ class Engine:
                         continue
                     await i
 
-        if hasattr(AioSpider.db, 'close'):
-            AioSpider.db.close()
+        if hasattr(GlobalConstant().database, 'close'):
+            GlobalConstant().database.close()
 
         self.logger.info(f'爬取结束，总共成功发起{await self.scheduler.request_count()}个请求')
         self.spider.spider_close()
@@ -226,6 +236,8 @@ class Engine:
         try:
             # 将协程注册到事件循环中
             self.loop.run_until_complete(self.execute())
+        except KeyboardInterrupt:
+            self.logger.error('手动退出')
         except Exception as e:
             raise e
 
@@ -244,7 +256,7 @@ class Engine:
         )
 
         async with aiohttp.ClientSession(connector=connector) as s:
-            AioSpider.session = s
+            GlobalConstant().session = s
             for request in self.spider.start_requests():
                 await self.scheduler.push_request(request)
 

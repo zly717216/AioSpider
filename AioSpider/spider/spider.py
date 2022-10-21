@@ -34,7 +34,6 @@ class Spider:
 
     def start(self):
         """ 把爬虫传递到引擎中，初始化爬虫对象 """
-
         engine = Engine(self)
         engine.start()
 

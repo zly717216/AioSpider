@@ -3,6 +3,7 @@ import re
 import json
 import time
 import hashlib
+from pathlib import Path
 from typing import Union, Any, Iterable
 from datetime import datetime
 
@@ -11,15 +12,16 @@ import numpy as np
 from pandas import to_datetime, Timestamp
 
 
-def mkdir(path):
+def mkdir(path: Union[Path, str]):
     """ 创建目录 """
 
-    if os.path.isfile(path):
-        path = os.path.split(path)[0]
+    if path.exists():
+        return
 
-    if not os.path.exists(path):
-        os.makedirs(path, exist_ok=True)
-
+    if path.suffix:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        path.mkdir(parents=True, exist_ok=True)
 
 def str2num(char: str, multi: int = 1, force: bool = False, _type=int) -> Union[int, float, str]:
     """
@@ -288,7 +290,7 @@ def max(arry: Iterable, default=0):
     return np.array(arry).max()
 
 
-def max(arry: Iterable, default=0):
+def min(arry: Iterable, default=0):
     """
     求最小值
     :param arry: 数组，如果传入可迭代对象，会强转成数组

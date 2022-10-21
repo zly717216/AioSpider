@@ -13,6 +13,9 @@ class GlobalConstant:
 
     _settings = None
     _dataloader = None
+    _database = None
+    _session = None
+    _pipelines = None
 
     def __new__(cls, *args, **kwargs):
         if not hasattr(cls, '_instance'):
@@ -27,6 +30,18 @@ class GlobalConstant:
     def dataloader(self):
         return self._dataloader
 
+    @property
+    def database(self):
+        return self._database
+    
+    @property
+    def session(self):
+        return self._session
+
+    @property
+    def pipelines(self):
+        return self._pipelines
+
     @settings.getter
     def settings(self):
         return self._settings
@@ -35,13 +50,37 @@ class GlobalConstant:
     def dataloader(self):
         return self._dataloader
 
+    @database.getter
+    def database(self):
+        return self._database
+
+    @session.getter
+    def session(self):
+        return self._session
+
+    @pipelines.getter
+    def pipelines(self):
+        return self._pipelines
+
     @settings.setter
-    def settings(self, sts):
-        self._settings = sts
+    def settings(self, k):
+        self._settings = k
 
     @dataloader.setter
-    def dataloader(self):
-        return self._dataloader
+    def dataloader(self, k):
+        self._dataloader = k
+
+    @database.setter
+    def database(self, k):
+        self._database = k
+
+    @session.setter
+    def session(self, k):
+        self._session = k
+
+    @pipelines.setter
+    def pipelines(self, k):
+        self._pipelines = k
 
 
 class AioObject:
@@ -111,5 +150,3 @@ def init_logger(settings=sts.LOGGING):
 
 logger = None
 
-session = None
-db = None
