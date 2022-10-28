@@ -6,7 +6,8 @@ class Request(object):
 
     def __init__(
             self, url, method='GET', callback=None, params=None, headers=None, encoding='utf-8',
-            data=None, cookies=None, timeout=0, proxy=None, priority=1, dnt_filter=False, *args, **kwargs
+            data=None, cookies=None, timeout=0, proxy=None, priority=1, dnt_filter=False,
+            help=None, *args, **kwargs
         ):
 
         self.encoding = encoding
@@ -16,6 +17,7 @@ class Request(object):
         self.cookies = cookies or {}
         self.callback = callback
         self.dnt_filter = dnt_filter
+        self.help = help
 
         self.headers = headers or {}
         if kwargs.get('add_headers'):
@@ -51,4 +53,6 @@ class Request(object):
         return self.url
 
     def __str__(self):
+        if self.help:
+            return f"<{self.help} {self.method} {self.url}>"
         return f"<{self.method} {self.url}>"

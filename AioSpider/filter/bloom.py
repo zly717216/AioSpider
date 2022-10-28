@@ -1,38 +1,3 @@
-# -*- encoding: utf-8 -*-
-"""This module implements a bloom filter probabilistic data structure and
-an a Scalable Bloom Filter that grows in size as your add more items to it
-without increasing the false positive error_rate.
-
-Requires the bitarray library: http://pypi.python.org/pypi/bitarray/
-
-    >>> from pybloom import BloomFilter
-    >>> f = BloomFilter(capacity=10000, error_rate=0.001)
-    >>> for i in range_fn(0, f.capacity):
-    ...     _ = f.add(i)
-    ...
-    >>> 0 in f
-    True
-    >>> f.capacity in f
-    False
-    >>> len(f) <= f.capacity
-    True
-    >>> (1.0 - (len(f) / float(f.capacity))) <= f.error_rate + 2e-18
-    True
-
-    >>> from pybloom import ScalableBloomFilter
-    >>> sbf = ScalableBloomFilter(mode=ScalableBloomFilter.SMALL_SET_GROWTH)
-    >>> count = 10000
-    >>> for i in range_fn(0, count):
-    ...     _ = sbf.add(i)
-    ...
-    >>> sbf.capacity > count
-    True
-    >>> len(sbf) <= count
-    True
-    >>> (1.0 - (len(sbf) / float(count))) <= sbf.error_rate + 2e-18
-    True
-"""
-
 from __future__ import absolute_import
 import math
 import hashlib
@@ -41,7 +6,6 @@ import bitarray
 
 from .utils import range_fn, is_string_io, running_python_3
 from struct import unpack, pack, calcsize
-
 
 
 def make_hashfuncs(num_slices, num_bits):
@@ -95,16 +59,10 @@ class BloomFilter(object):
     FILE_FMT = b'<dQQQQ'
 
     def __init__(self, capacity, error_rate=0.001):
-        """Implements a space-efficient probabilistic data structure
-
-        capacity
-            this BloomFilter must be able to store at least *capacity* elements
-            while maintaining no more than *error_rate* chance of false
-            positives
-        error_rate
-            the error_rate of the filter returning false positives. This
-            determines the filters capacity. Inserting more than capacity
-            elements greatly increases the chance of false positives.
+        """
+        Implements a space-efficient probabilistic data structure
+        :param capacity：初始容量，当实际元素的数量超过这个初始化容量时，误判率上升。
+        :param error_rate：期望错误率，期望错误率越低，需要的空间就越大。同时需要的hash函数也越多
 
         >>> b = BloomFilter(capacity=100000, error_rate=0.001)
         >>> b.add("test")

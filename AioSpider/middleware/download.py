@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 import cchardet
 
-import AioSpider
+from AioSpider import GlobalConstant
 
 
 user_agent = {
@@ -1269,6 +1269,7 @@ class Middleware(metaclass=ABCMeta):
         self.spider = spider
         self.settings = settings
         self.failure_pool = scheduler.failure_pool
+        self._log = GlobalConstant().logger
     
     @abstractmethod
     def process_request(self, request):
@@ -1378,7 +1379,7 @@ class RetryMiddleware(Middleware):
 
         failure_times = self.failure_pool.get_failure_times(request)
         if failure_times > 0:
-            AioSpider.logger.warning(f'正在进行第{failure_times}次重试 ---> {request}')
+            self._logger.warning(f'正在进行第{failure_times}次重试 ---> {request}')
 
         return None
 
@@ -1462,7 +1463,7 @@ class TimeoutErrorMiddleware(ErrorMiddleware):
 
     def process_exception(self, request, exception):
         if isinstance(exception, exceptions.TimeoutError):
-            AioSpider.logger.error(
+            self._logger.error(
                 f'网络连接超时：{request}, TIMEOUT: {request.timeout or getattr(self.settings, "REQUEST_TIMEOUT", 0)}'
             )
 

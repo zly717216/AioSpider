@@ -3,6 +3,8 @@ import re
 import json
 import time
 import hashlib
+import webbrowser
+from urllib import parse
 from pathlib import Path
 from typing import Union, Any, Iterable
 from datetime import datetime
@@ -10,6 +12,7 @@ from datetime import datetime
 import pydash
 import numpy as np
 from pandas import to_datetime, Timestamp
+from lxml import etree
 
 
 def mkdir(path: Union[Path, str]):
@@ -138,7 +141,10 @@ def parse_json(json_data: dict, index: str, default=None) -> str:
         except:
             return default
 
-    return pydash.get(json_data, index, default)
+    data = pydash.get(json_data, index, default)
+    if not data:
+        return default
+    return data
 
 
 def load_json(data: str, default=None) -> Union[dict, list]:
@@ -271,7 +277,7 @@ def join(data: Iterable, on: str = '') -> str:
     return on.join(data)
 
 
-def max(arry: Iterable, default=0):
+def max(arry: Iterable, default=0) -> Union[int, float]:
     """
     求最大值
     :param arry: 数组，如果传入可迭代对象，会强转成数组
@@ -290,7 +296,7 @@ def max(arry: Iterable, default=0):
     return np.array(arry).max()
 
 
-def min(arry: Iterable, default=0):
+def min(arry: Iterable, default=0) -> Union[int, float]:
     """
     求最小值
     :param arry: 数组，如果传入可迭代对象，会强转成数组
@@ -307,3 +313,65 @@ def min(arry: Iterable, default=0):
         return default
 
     return np.array(arry).min()
+
+
+def xpath(node: Union[str, etree._Element], q: str, default=None) -> Any:
+    """
+    xpath 提取数据
+    :param node: 原始 html 文本数据
+    :param q: xpath 解析式
+    :param default: 默认值
+    :return: default or any
+    """
+
+    try:
+        if isinstance(node, str):
+            return etree.HTML(node).xpath(q)
+        elif isinstance(node, etree._Element):
+            return node.xpath(q)
+        else:
+            return default
+    except:
+        return default
+
+
+def xpath_text(node: Union[str, etree._Element], q: str, on='', default: str = None) -> str:
+    """
+    xpath 提取文本数据
+    :param html: 原始 html 文本数据
+    :param q: xpath 解析式
+    :param on: 连接符
+    :param default: 默认值
+    :return: str
+    """
+
+    if default is None:
+        default = ''
+
+    text_list = xpath(node=node, q=q, default=default)
+
+    if isinstance(text_list, list):
+        return join(text_list, on) if text_list else default
+
+    if isinstance(text_list, str):
+        return text_list
+
+    return default
+
+
+def extract_params(url: str) -> dict:
+    """从 url 中提取参数"""
+
+    params_query = parse.urlparse(url).query
+    return {i[0]: i[-1] for i in parse.parse_qsl(params_query)}
+
+
+def extract_url(url: str) -> dict:
+    """从url中提取接口"""
+
+    url_parse = parse.urlparse(url)
+    return f'{url_parse.scheme}://{url_parse.netloc}{url_parse.path}'
+
+
+def open_html(url: str):
+    webbrowser.open(url)

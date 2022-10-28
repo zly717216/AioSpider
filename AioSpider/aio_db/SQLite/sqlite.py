@@ -3,8 +3,7 @@ import asyncio
 from typing import Optional, Iterable
 
 import aiosqlite
-import AioSpider
-from AioSpider import AioObject
+from AioSpider import AioObject, GlobalConstant
 
 
 class SQLiteAPI(AioObject):
@@ -14,6 +13,7 @@ class SQLiteAPI(AioObject):
 
     async def __init__(self, path, timeout=None):
         self.conn = await aiosqlite.connect(database=path, iter_chunk_size=64, timeout=timeout)
+        self._logger = GlobalConstant().logger
 
     async def _execute(self, sql: str, *args, **kwargs):
         """执行sql语句"""
@@ -23,11 +23,11 @@ class SQLiteAPI(AioObject):
                 await cur.execute(sql, kwargs or args)
             except aiosqlite.IntegrityError as e:
                 if 'unique' in str(e).lower():
-                    AioSpider.logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
+                    self._logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
                 else:
-                    AioSpider.logger.error(e)
+                    self._logger.error(e)
             except Exception as e:
-                AioSpider.logger.error(e)
+                self._logger.error(e)
             finally:
                 await self.commit()
 
@@ -224,11 +224,11 @@ class SQLiteAPI(AioObject):
                     await cur.executemany(sql, values)
                 except aiosqlite.IntegrityError as e:
                     if 'unique' in str(e).lower():
-                        AioSpider.logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
+                        self._logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
                     else:
-                        AioSpider.logger.error(e)
+                        self._logger.error(e)
                 except Exception as e:
-                    AioSpider.logger.error(e)
+                    self._logger.error(e)
                 finally:
                     await self.commit()
         else:

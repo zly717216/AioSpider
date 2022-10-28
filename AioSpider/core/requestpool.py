@@ -1,3 +1,4 @@
+import copy
 import os
 import time
 import json
@@ -10,10 +11,8 @@ import pickle
 import aioredis
 from redis import ConnectionPool, Redis
 
-import AioSpider
 from AioSpider import tools, AioObject, GlobalConstant
 from AioSpider.http import Request
-from AioSpider import constants
 
 
 class OrderQueue(Queue):
@@ -67,13 +66,14 @@ class RequestBaseDB:
 
     def __init__(self):
         self._start_queue = OrderQueue()
+        self._logger = GlobalConstant().logger
 
     def _get_request_hash(self, request, status):
         """计算request的hash值"""
 
         sts = GlobalConstant().settings
         url = request.url
-        params = request.params or {}
+        params = copy.deepcopy(request.params) or {}
         data = request.data or {}
 
         if isinstance(data, str):
@@ -228,7 +228,7 @@ class RequestRedisDB(AioObject, RequestBaseDB):
             if await self.db.ping():
                 return True
         except Exception as e:
-            AioSpider.logger.error(e)
+            self._logger.error(e)
 
         self.db = self.connect()
 
@@ -402,11 +402,11 @@ class RequestDB(AioObject):
         cache_settings = getattr(GlobalConstant().settings, 'CACHED_REQUEST', {})
 
         if cache_settings and cache_settings.get('LOAD_SUCCESS', False):
-            cache_path = Path(cache_settings.get('CACHE_PATH', '')) / constants.CACHE_DIR_NAME
+            cache_path = Path(cache_settings.get('CACHE_PATH', '')) / GlobalConstant().spider_name
             self.url_db._loads_request(path=cache_path, status='success')
 
         if cache_settings and cache_settings.get('LOAD_FAILURE', False):
-            cache_path = Path(cache_settings.get('CACHE_PATH', '')) / constants.CACHE_DIR_NAME
+            cache_path = Path(cache_settings.get('CACHE_PATH', '')) / GlobalConstant().spider_name
             self.url_db._loads_request(path=cache_path, status='failure')
 
     async def _dumps_request(self):
@@ -416,7 +416,7 @@ class RequestDB(AioObject):
                 expire = 100 * 365 * 24 * 60 * 60
             else:
                 expire = cache_settings.get('CACHED_EXPIRE_TIME', 3600)
-            cache_path = Path(cache_settings.get('CACHE_PATH', '')) / constants.CACHE_DIR_NAME
+            cache_path = Path(cache_settings.get('CACHE_PATH', '')) / GlobalConstant().spider_name
             tools.mkdir(cache_path)
             await self.url_db._dumps_request(path=cache_path, expire=expire)
 
@@ -435,6 +435,7 @@ class WaitingRequest:
         # 目前pool中url最多的host和url数量
         self.max_host_name = ''
         self.max_host_count = 0
+        self._logger = GlobalConstant().logger
 
     async def has_request(self, request):
 
@@ -452,13 +453,13 @@ class WaitingRequest:
         host = parse.urlparse(request.url).netloc
 
         if not host or '.' not in host:
-            AioSpider.logger.warning(f'该url可能存在问题：{request}')
+            self._logger.warning(f'该url可能存在问题：{request}')
             return False
 
         if host in self.waiting:
 
             if not isinstance(self.waiting[host], OrderQueue):
-                AioSpider.logger.warning('待下载请求队列的host值必须为Queue类型')
+                self._logger.warning('待下载请求队列的host值必须为Queue类型')
                 q = OrderQueue()
                 self.waiting[host] = q
 
@@ -667,6 +668,7 @@ class RequestPool(AioObject):
         self.pending = PendingRequest()
         self.failure = FailureRequest()
         self.url_db = await RequestDB()
+        self._logger = GlobalConstant().logger
 
     async def close(self):
         await self._dumps_cache()
@@ -696,7 +698,7 @@ class RequestPool(AioObject):
             await self.url_db._set_failure(request)
             await self.failure.put_request(request)
 
-        AioSpider.logger.debug(f'总共完成{await self._url_db_qsize()}个请求 --> {response}')
+        self._logger.debug(f'总共完成{await self._url_db_qsize()}个请求 --> {response}')
         return
 
     async def _push_to_waiting(self, request):
@@ -704,33 +706,33 @@ class RequestPool(AioObject):
 
         # 1.如果在waiting队列中
         if await self.waiting.has_request(request):
-            AioSpider.logger.debug(f'request 已在 waiting 队列中 ---> {request}')
+            self._logger.debug(f'request 已在 waiting 队列中 ---> {request}')
             return False
 
         # 2.如果在pending队列中
         if await self.pending.has_request(request):
-            AioSpider.logger.debug(f'request 已在 pending 队列中 ---> {request}')
+            self._logger.debug(f'request 已在 pending 队列中 ---> {request}')
             return False
 
         # 3.如果在failure队列中
         if await self.failure.has_request(request):
-            AioSpider.logger.debug(f'request 已在 failure 队列中 ---> {request}')
+            self._logger.debug(f'request 已在 failure 队列中 ---> {request}')
             return False
 
         # 4.如果在url_db缓存中
         if await self.url_db._has_request(request):
-            AioSpider.logger.debug(f'request 已在 url_db 队列中 ---> {request}')
+            self._logger.debug(f'request 已在 url 缓存队列中 ---> {request}')
             return False
 
         # 添加
         parse_result = parse.urlparse(request.url)
         host = parse_result.netloc
         if not host or '.' not in host or 'http' not in parse_result.scheme:
-            AioSpider.logger.debug(f'该request可能存在问题 ---> {request}')
+            self._logger.debug(f'该request可能存在问题 ---> {request}')
             return False
 
         await self.waiting.put_request(request)
-        AioSpider.logger.debug(f'1个request添加进 waiting 队列，总共{self._waiting_qsize()}个request等待发起请求 --> {request}')
+        self._logger.debug(f'1个request添加进 waiting 队列，总共{self._waiting_qsize()}个request等待发起请求 --> {request}')
 
         return True
 
@@ -783,7 +785,7 @@ class RequestPool(AioObject):
 
             # 4.添加到 pending队列中
             await self.pending.put_request(request)
-            AioSpider.logger.debug(
+            self._logger.debug(
                 f'从 failure 队列中取出1个request，正在发起{self._pending_qsize()}个请求，'
                 f'剩余{self._failure_qsize()}个request等待发起请求 --> {request}'
             )

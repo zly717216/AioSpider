@@ -5,7 +5,6 @@ from pprint import pformat
 
 from lxml import etree
 
-import AioSpider
 from AioSpider.parse import ReParse, XpathParse
 from .request import Request
 
@@ -73,6 +72,9 @@ class Response(object):
 
     def __str__(self):
         s = f'Response <{self.status} {self.request.method} {self.url}>'
+
+        if self.request.help:
+            s = f'Response <{self.request.help} {self.status} {self.request.method} {self.url}>'
 
         if self.request.headers:
             s += '\n' + f'headers: {pformat(self.request.headers)}'

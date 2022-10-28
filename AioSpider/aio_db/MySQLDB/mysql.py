@@ -4,8 +4,7 @@ import asyncio
 from typing import Optional, Iterable
 
 import aiomysql
-import AioSpider
-from AioSpider import AioObject
+from AioSpider import AioObject, GlobalConstant
 
 
 class MySQLAPI(AioObject):
@@ -18,6 +17,7 @@ class MySQLAPI(AioObject):
             charset: str = "utf8mb4", sql_mode: str = "TRADITIONAL"
     ):
 
+        self._logger = GlobalConstant().logger
         self.max_idle_time = float(max_idle_time)
 
         args = dict(
@@ -149,11 +149,11 @@ class MySQLAPI(AioObject):
                     await cur.execute(sql, values)
                 except aiosqlite.IntegrityError as e:
                     if 'unique' in str(e).lower():
-                        AioSpider.logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
+                        self._logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
                     else:
-                        AioSpider.logger.error(e)
+                        self._logger.error(e)
                 except Exception as e:
-                    AioSpider.logger.error(e)
+                    self._logger.error(e)
                 finally:
                     await conn.commit()
 
@@ -167,13 +167,13 @@ class MySQLAPI(AioObject):
                     await cur.executemany(sql, values)
                 except aiomysql.IntegrityError as e:
                     if 'unique' in str(e).lower():
-                        AioSpider.logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
+                        self._logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
                     else:
-                        AioSpider.logger.error(e)
+                        self._logger.error(e)
                 except aiomysql.DataError as e:
-                    AioSpider.logger.error(f'数据错误：{e}')
+                    self._logger.error(f'数据错误：{e}')
                 except Exception as e:
-                    AioSpider.logger.error(e)
+                    self._logger.error(e)
                 finally:
                     await conn.commit()
 
@@ -186,7 +186,7 @@ class MySQLAPI(AioObject):
                 try:
                     await cur.execute(sql, values)
                 except Exception as e:
-                    AioSpider.logger.error(e)
+                    self._logger.error(e)
                 finally:
                     return await cur.fetchall()
 

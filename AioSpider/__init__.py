@@ -16,11 +16,23 @@ class GlobalConstant:
     _database = None
     _session = None
     _pipelines = None
+    _spider_name = None
+    _logger = None
 
     def __new__(cls, *args, **kwargs):
         if not hasattr(cls, '_instance'):
             setattr(cls, '_instance', super().__new__(cls))
         return cls._instance
+
+    @property
+    def spider_name(self):
+        return self._spider_name
+
+    @property
+    def logger(self):
+        if self._logger is None:
+            self._logger = init_logger()
+        return self._logger
 
     @property
     def settings(self):
@@ -42,25 +54,13 @@ class GlobalConstant:
     def pipelines(self):
         return self._pipelines
 
-    @settings.getter
-    def settings(self):
-        return self._settings
+    @spider_name.setter
+    def spider_name(self, k):
+        self._spider_name = k
 
-    @dataloader.getter
-    def dataloader(self):
-        return self._dataloader
-
-    @database.getter
-    def database(self):
-        return self._database
-
-    @session.getter
-    def session(self):
-        return self._session
-
-    @pipelines.getter
-    def pipelines(self):
-        return self._pipelines
+    @logger.setter
+    def logger(self, k):
+        self._logger = k
 
     @settings.setter
     def settings(self, k):
@@ -93,12 +93,8 @@ class AioObject:
 
 def init_logger(settings=sts.LOGGING):
 
-    log_name = settings['LOG_NAME']
-
-    if not log_name:
-        warnings.warn("logger的'name'属性必须为非空str类型，日志名称设置无效，将使用默认名'aioSpider'作为日志名称")
-
-    file_path = settings['LOG_PATH']
+    log_name = settings.get('LOG_NAME')
+    file_path = settings['LOG_PATH'] / ((log_name or GlobalConstant().spider_name) + '.log')
     cmd_fmt = settings['LOG_CMD_FORMAT']
     file_fmt = settings['LOG_FILE_FORMAT']
 
@@ -146,7 +142,3 @@ def init_logger(settings=sts.LOGGING):
     }
 
     return lgr(**kwargs)
-
-
-logger = None
-

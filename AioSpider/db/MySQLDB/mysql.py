@@ -2,7 +2,7 @@ import time
 
 import pymysql
 
-import AioSpider
+from AioSpider import GlobalConstant
 
 
 class MySQLAPI:
@@ -16,6 +16,7 @@ class MySQLAPI:
     ):
 
         self.max_idle_time = float(max_idle_time)
+        self._logger = GlobalConstant().logger
 
         args = dict(
             use_unicode=True, charset=charset, database=database,
@@ -51,7 +52,7 @@ class MySQLAPI:
         try:
             self.reconnect()
         except:
-            AioSpider.logger.error(f"Cannot connect to MySQL on {host}", exc_info=True)
+            self._logger.error(f"Cannot connect to MySQL on {host}", exc_info=True)
 
     def __del__(self):
         """实例销毁后确保数据库连接关闭"""
@@ -84,7 +85,7 @@ class MySQLAPI:
         try:
             cursor.execute(sql, kwargs or args)
         except Exception as e:
-            AioSpider.logger.error(e)
+            self._logger.error(e)
         finally:
             cursor.close()
 
@@ -143,7 +144,7 @@ class MySQLAPI:
         try:
             return self._execute(sql, *values)
         except Exception as e:
-            AioSpider.logger.error(e)
+            self._logger.error(e)
 
     def insert_many(self, table: str, items: list) -> None:
         """

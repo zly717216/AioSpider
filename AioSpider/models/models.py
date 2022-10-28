@@ -4,7 +4,6 @@ import asyncio
 from pathlib import Path
 from importlib import import_module
 
-import AioSpider
 from .field import Field, AutoIntField
 from AioSpider import tools, GlobalConstant
 from AioSpider.filter import BloomFilter
@@ -15,6 +14,7 @@ class DataLoader:
     def __init__(self, capacity):
         self._capacity = capacity
         self._data_contain = dict()
+        self._logger = GlobalConstant().logger
 
     async def _load_data(self):
 
@@ -36,6 +36,7 @@ class DataLoader:
                 bloom = BloomFilter(capacity=self._capacity)
                 bloom.add_many(data, is_hash=True)
                 self._data_contain[table] = bloom
+                self._logger.info(f'已加载到 {table} 表 {len(data)} 条数据')
 
     def _handler_name(self, name):
 
@@ -53,6 +54,8 @@ class DataLoader:
             return '_'.join(name)
 
     def __contains__(self, item, table):
+        if self._data_contain.get(table) is None:
+            return False
         return item in self._data_contain[table]
 
     def _get_field(self, model):
@@ -70,6 +73,7 @@ class DataLoader:
             if i in order:
                 continue
             order.append(i)
+
         return tools.join(order, ',')
 
 
@@ -81,6 +85,7 @@ class Container:
         self._hash = dict()
         self.item_count = dict()
         self._data_loader = None
+        self._logger = GlobalConstant().logger
 
     @property
     def data_loader(self):
@@ -101,11 +106,13 @@ class Container:
 
         table = sender.__name__
         item = sender.make_item()
+        item_copy = copy.deepcopy(item)
         field = self.data_loader._get_field(sender)
-        for i in copy.deepcopy(item):
+
+        for i in copy.deepcopy(item_copy):
             if i in field:
                 continue
-            item.pop(i)
+            item_copy.pop(i)
 
         if self._contain.get(table) is None:
             self._contain[table] = list()
@@ -113,7 +120,7 @@ class Container:
         if self._hash.get(table) is None:
             self._hash[table] = set()
 
-        item_hash = tools.get_hash(item)
+        item_hash = tools.get_hash(item_copy)
         if item_hash not in self._hash[table] and not self.data_loader.__contains__(item_hash, table):
             self._hash[table].add(item_hash)
             self._contain[table].append(item)
@@ -141,7 +148,7 @@ class SQLContainer(Container):
         if self.sql_size(table) >= self._size:
             data = copy.deepcopy(self._contain[table])
             self.add_count(table, len(data))
-            AioSpider.logger.info(f'本次已向{table}表提交{len(data)}条记录，总共已提交{self.get_count(table)}条')
+            self._logger.info(f'本次已向{table}表提交{len(data)}条记录，总共已提交{self.get_count(table)}条')
             self.clear(table)
             await GlobalConstant().database.insert_many(table=table, items=data)
 
@@ -152,11 +159,11 @@ class SQLContainer(Container):
 
             await GlobalConstant().database.insert_many(table=k, items=self._contain[k])
             self.add_count(table, self.sql_size(table))
-            AioSpider.logger.info(f'本次已向{k}表提交{self.sql_size(table)}条记录，总共已提交{self.get_count(table)}条记录')
+            self._logger.info(f'本次已向{k}表提交{self.sql_size(table)}条记录，总共已提交{self.get_count(table)}条记录')
             self.clear(k)
 
         if self.all_count():
-            AioSpider.logger.info(
+            self._logger.info(
                 f'爬虫即将关闭：总共保存 {self.all_count()} 条数据'
                 f'（{"、".join([f"{k}表{v}条" for k, v in self.item_count.items()])}）'
             )
@@ -172,7 +179,7 @@ class CSVContainer(Container):
         if self.sql_size(table) >= self._size:
             data = copy.deepcopy(self._contain[table])
             self.add_count(table, len(data))
-            AioSpider.logger.info(f'本次已向{table}表提交{len(data)}条记录，总共已提交{self.get_count(table)}条')
+            self._logger.info(f'本次已向{table}表提交{len(data)}条记录，总共已提交{self.get_count(table)}条')
             self.clear(table)
             await GlobalConstant().database.insert_many(table=table, items=data, encoding=encoding)
 
@@ -183,10 +190,10 @@ class CSVContainer(Container):
 
             await GlobalConstant().database.insert_many(table=k, items=self._contain[k], encoding=encoding)
             self.add_count(table, self.sql_size(table))
-            AioSpider.logger.info(f'本次已向{k}表提交{self.sql_size(table)}条记录，总共已提交{self.get_count(table)}条')
+            self._logger.info(f'本次已向{k}表提交{self.sql_size(table)}条记录，总共已提交{self.get_count(table)}条')
             self.clear(k)
 
-        AioSpider.logger.info(
+        self._logger.info(
             f'爬虫即将关闭：总共保存 {self.all_count()} 条数据'
             f'（{"、".join([f"{k}表{v}条" for k, v in self.item_count.items()])}）'
         )

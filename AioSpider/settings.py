@@ -7,13 +7,12 @@ from .constants import LogLevel, Color, When, UserAgent, WriteMode
 # ---------------------------------- 系统相关配置 ---------------------------------- #
 
 # 切换工作路径为当前项目路径
-AIOSPIDER_PATH = os.path.abspath(os.path.dirname(__file__))
+AIOSPIDER_PATH = Path(__file__).parent
 
 # url缓存方式，记录已爬取url的状态，默认 queue（队列引擎），redis（redis引擎）
 BACKEND_CACHE_ENGINE = {
     'queue': {
-        'enabled': True,                    # 指定为队列引擎
-        'qsize': 1 * 10000 * 10000 * 10000  # 队列大小
+        'enabled': True                     # 指定为队列引擎
     },
     'redis': {
         'enabled': False,                   # 指定为redis引擎
@@ -28,7 +27,7 @@ BACKEND_CACHE_ENGINE = {
 # 日志配置
 LOGGING = {
     'LOG_NAME': 'aioSpider',                        # 日志名称
-    'LOG_PATH': "log/aioSpider.log",                # 日志存储路径
+    'LOG_PATH': AIOSPIDER_PATH / "log",             # 日志存储路径
     'LOG_CMD_FORMAT': '%(asctime)s - %(pathname)s - [line:%(lineno)d] - %(levelname)s: %(message)s',  # 控制台输出日志格式
     'LOG_FILE_FORMAT': '%(asctime)s - %(pathname)s - [line:%(lineno)d] - %(levelname)s: %(message)s',  # 文件输出日志格式
     'LOG_CMD_DATE_FORMAT': '%Y-%m-%d %H:%M:%S',     # 控制台输出日志时间格式
@@ -97,18 +96,22 @@ DOWNLOAD_MIDDLEWARE = {
 # 数据管道
 ITEM_PIPELINES = {}
 
-FILTER_FOREVER = True                       # 永久去重
-FILTER_EXPIRE_TIME = 60 * 60 * 24 * 30      # 去重过期时间1个月
-
+# 数据去重
+DATA_FILTER_ENABLE = True                   # 是否启用数据去重
 CACHED_ORIGIN_DATA = False                  # 是否启用缓存原始数据 数据量大的时候建议设置为True，每次启动将会自动去重
+CAPACITY = 5000 * 10000                     # 去重的数据容量 数据器中可以容纳100亿条数据
+MODEL_NAME_TYPE = 'smart'                   # lower / upper / smart，处理表明的方式
 
+# URL去重
 CACHED_REQUEST = {
-    'CACHED': False,                        # 是否缓存爬过的请求 将爬过的请求缓存到本地
-    'LOAD_SUCCESS': False,                  # 将CACHED_REQUEST缓存中成功的请求加载到队列
+    'CACHED': True,                         # 是否缓存爬过的请求 将爬过的请求缓存到本地
+    'LOAD_SUCCESS': True,                   # 将CACHED_REQUEST缓存中成功的请求加载到队列
     'LOAD_FAILURE': False,                  # 将CACHED_REQUEST缓存中失败的请求加载到队列
-    'CACHED_EXPIRE_TIME': 3600,             # 缓存时间 秒
-    'CACHE_PATH': os.getenv("APPDATA")      # 数据和资源缓存路径
+    'CACHED_EXPIRE_TIME': 60 * 60 * 24 * 30,    # 缓存时间 秒
+    'CACHE_PATH': AIOSPIDER_PATH / "cache",     # 数据和资源缓存路径
+    'FILTER_FOREVER': True                  # 是否永久去重，配置此项 CACHED_EXPIRE_TIME 无效
 }
+
 IGNORE_STAMP = True                         # 去重忽略时间戳
 STAMP_NAMES = []                            # 时间戳字段名，一般指请求中params、data中的参数
 

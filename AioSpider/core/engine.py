@@ -3,6 +3,7 @@ import sys
 import time
 import json
 import asyncio
+import warnings
 from pathlib import Path
 from pprint import pformat
 from datetime import datetime
@@ -10,7 +11,6 @@ from importlib import import_module
 
 import aiohttp
 
-import AioSpider
 from AioSpider.models import Model
 from AioSpider.downloader import Downloader
 from AioSpider.http import Request, Response
@@ -63,7 +63,7 @@ class Engine:
         else:
             sts = settings.LOGGING
 
-        if not sts['LOG_NAME']:
+        if not sts.get('LOG_NAME'):
             warnings.warn("logger的'name'属性必须为非空str类型，日志名称设置无效，将使用默认名'aioSpider'作为日志名称")
             sts['LOG_NAME'] = self.spider.name
 
@@ -73,8 +73,8 @@ class Engine:
             tools.mkdir(sts['LOG_PATH'])
 
         logger = init_logger(sts)
-        AioSpider.logger = logger
         self.spider.logger = logger
+        GlobalConstant().logger = logger
 
         return logger
 
@@ -197,6 +197,7 @@ class Engine:
 
     async def _open(self):
 
+        GlobalConstant().spider_name = self.spider.name
         await self._init_database()
         self.pipeline = self._init_pipeline()
         self.scheduler = await Scheduler()
@@ -237,6 +238,7 @@ class Engine:
             # 将协程注册到事件循环中
             self.loop.run_until_complete(self.execute())
         except KeyboardInterrupt:
+            self.loop.run_until_complete(self.scheduler.close())
             self.logger.error('手动退出')
         except Exception as e:
             raise e

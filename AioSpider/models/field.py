@@ -1,6 +1,6 @@
 import time
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, Union
 
 from AioSpider import tools
@@ -127,13 +127,15 @@ class CharField(Field):
 
     def __init__(
             self, name, max_length=255, unique=False, blank=True, null=True, default=None,
-            choices=None, validators=None, db_column=None, is_save=True, dnt_filter=False
+            choices=None, validators=None, db_column=None, is_save=True, dnt_filter=False,
+            is_truncate=False
     ):
         super(CharField, self).__init__(
             name=name, max_length=max_length, unique=unique, blank=blank, null=null,
             db_index=False, default=default, choices=choices, db_column=db_column,
             validators=validators, is_save=is_save, dnt_filter=dnt_filter
         )
+        self.is_truncate = is_truncate
         self._value = ''
         self._check(f'{name}(CharField)')
 
@@ -183,13 +185,22 @@ class CharField(Field):
         if self._value is None and not self.null:
                 self._value = self.default or ''
 
+        if isinstance(self._value, (int, float)):
+            self._value = str(self._value)
+
         if not isinstance(self._value, (str, type(None))):
             raise ValueError(f'{self.name}值错误，value={self._value}, value必须为str类型')
 
-        if self._value and len(self._value) > 255:
-            raise ValueError(
-                f'{self.name}值错误，value={self._value}, max_length is {self.max_length}, value超出最大长度范围'
-            )
+        if isinstance(self._value, str):
+            self._value = self._value.replace(' ', '')
+
+        if self._value and len(self._value) > self.max_length:
+            if self.is_truncate:
+                self._value = self._value[:self.max_length]
+            else:
+                raise ValueError(
+                    f'{self.name}值错误，value={self._value}, max_length is {self.max_length}, value超出最大长度范围'
+                )
 
     def _table_sql(self):
         sql = f'{self.db_column} VARCHAR({self.max_length})'
@@ -269,6 +280,9 @@ class FloatField(Field):
 
         if self._value is None and not self.null:
             self._value = self.default or float()
+            
+        if isinstance(self._value, int):
+            self._value = int(self._value)
 
         if not isinstance(self._value, (float, type(None))):
             if isinstance(self._value, int):
@@ -511,11 +525,55 @@ class StampField(IntField):
     #         self._value = time.strftime("%Y-%m-%d %H:%M:%S.%f", time_local)
 
 
+class DateField(Field):
+
+    def __init__(self, name, db_column=None, dnt_filter=True):
+        super(DateField, self).__init__(
+            name=name, max_length=None, unique=False, blank=True, null=True,
+            db_index=False, default=None, choices=None, db_column=db_column,
+            validators=None, is_save=True, dnt_filter=dnt_filter
+        )
+        self._value = datetime.now()
+        self._check(f'{name}(DateField)')
+
+    def _check(self, field='DateTimeField'):
+        return super(DateField, self)._check(field=field)
+
+    def _check_value(self):
+
+        if self._value is None:
+            self._value = datetime.now().date()
+
+        if isinstance(self._value, str):
+            try:
+                self._value = tools.TimeConverter.strtime_to_time(self._value)
+                if self._value is not  None:
+                    self._value = self._value.date()
+            except:
+                raise ValueError(f'值错误：{self.name} 必须为可识别的时间字符串，当前值为：{self._value}')
+
+        if isinstance(self._value, int):
+            try:
+                self._value = tools.TimeConverter.stamp_to_time(self._value)
+                if self._value is not None:
+                    self._value = self._value.date()
+            except:
+                raise ValueError(f'值错误：{self.name} 必须秒级或毫秒级时间戳，当前值为：{self._value}')
+
+        if not self.null and not isinstance(self._value, date):
+            raise TypeError(f'类型错误：{self.name} 必须为时间类型，当前类型为：{type(self._value)}')
+
+    def _table_sql(self):
+
+        sql = f'{self.db_column} DATE NOT NULL'
+        return sql
+
+
 class DateTimeField(Field):
 
     def __init__(self, name, db_column=None, dnt_filter=True):
         super(DateTimeField, self).__init__(
-            name=name, max_length=None, unique=False, blank=False, null=False,
+            name=name, max_length=None, unique=False, blank=True, null=True,
             db_index=False, default=None, choices=None, db_column=db_column,
             validators=None, is_save=True, dnt_filter=dnt_filter
         )
@@ -542,7 +600,7 @@ class DateTimeField(Field):
             except:
                 raise ValueError(f'值错误：{self.name} 必须秒级（10位）或毫秒级（13位）时间戳，当前值为：{self._value}')
 
-        if not isinstance(self._value, datetime):
+        if not self.null and not isinstance(self._value, datetime):
             raise TypeError(f'类型错误：{self.name} 必须为时间类型，当前类型为：{type(self._value)}')
 
     def _table_sql(self):
@@ -581,12 +639,11 @@ class TextField(Field):
 
     def _check_value(self):
 
+        if self._value is None:
+            self._value = self.default or ''
+
         if not isinstance(self._value, str):
             raise ValueError(f'{self.name}值错误，value={self._value}, value必须为str类型')
-
-        if not self._value:
-            if self.default:
-                self._value = self.default or ''
 
     def _table_sql(self):
         sql = f'{self.db_column} BLOB NULL'

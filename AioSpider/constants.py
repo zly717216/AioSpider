@@ -43,6 +43,3 @@ class UserAgent:
 class WriteMode:
     A = 'a'     # 追加模式
     W = 'w'     # 覆盖模式
-
-
-CACHE_DIR_NAME = 'AioSpider'

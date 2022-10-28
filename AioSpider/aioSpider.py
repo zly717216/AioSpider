@@ -1,119 +1,426 @@
+import re
 import sys
 from pathlib import Path
+from abc import ABCMeta, abstractmethod
+
 from AioSpider.template import create_project as cpj
 from AioSpider.template import gen_spider as gs
+from AioSpider import tools
 
 
-argv = sys.argv
-# aioSpider options value [-argv]
+class AioSpiderOptions(metaclass=ABCMeta):
+    """command options base class"""
+
+    @abstractmethod
+    def __init__(self):
+        self.p = None
+
+    def __str__(self):
+        return self.p
+
+    def __repr__(self):
+        return self.p
 
 
-# 创建项目 aioSpider createProject project
-def create_project(name):
-
-    items = cpj(name)
-
-    for item in items:
-        if item['type'] == 'dir' and not item['path'].exists():
-            item['path'].mkdir(parents=True, exist_ok=True)
-
-    for item in items:
-        if item['type'] == 'file' and not item['path'].exists():
-            item['path'].write_text(item['text'], encoding='utf-8')
+class AioSpiderOptionsP(AioSpiderOptions):
+    def __init__(self):
+        self.p = '-p'
 
 
-# 创建爬虫 aioSpider genSpider spider
-def gen_spider(args):
-
-    name = args[2]
-    if len(args) == 4:
-        start_url = args[3]
-    else:
-        start_url = None
-
-    spider_text = gs(name, start_url)
-    path = Path().cwd() / f'spider/{name}.py'
-    if not path.exists():
-        path.write_text(spider_text, encoding='utf-8')
+class AioSpiderOptionsS(AioSpiderOptions):
+    def __init__(self):
+        self.p = '-s'
 
 
-# 创建爬虫 aioSpider genModel model
-def gen_model(args):
-    sql = args[2]
-    print(sql)
+class AioSpiderOptionsI(AioSpiderOptions):
+    def __init__(self):
+        self.p = '-i'
 
 
-sql = """
-CREATE TABLE `mmb_main_essential_information` (
-  `ID` int NOT NULL AUTO_INCREMENT,
-  `NAME` varchar(100) NOT NULL COMMENT '公司名称',
-  `SUOSHUSF` varchar(30) DEFAULT NULL COMMENT '所属省份',
-  `SUOSHUCS` varchar(50) DEFAULT NULL COMMENT '所属城市',
-  `SUOSHUQX` varchar(50) DEFAULT NULL COMMENT '所属区县',
-  `SUOSHUCYL` varchar(80) DEFAULT NULL COMMENT '所属产业链1',
-  `SUOSHUHY` varchar(40) DEFAULT NULL COMMENT '所属行业',
-  `SUOSHUEJHY` varchar(80) DEFAULT '' COMMENT '所属二级行业1',
-  `JINGYINGFW` text COMMENT '经营范围',
-  `SUOSHUZBSC` varchar(20) DEFAULT NULL COMMENT '所属资本市场',
-  `ZIBENSCDY` int DEFAULT NULL COMMENT '所属资本市场对应（A股拟IPO公司-1，A股公司-2，三板公司-3，四板公司-4，已私募融资公司-5，非挂牌非上市公司-6，海外上市公司-7）',
-  `OLDEJHANGYE` varchar(80) DEFAULT NULL,
-  `OLDHANGYE` varchar(40) DEFAULT NULL COMMENT '员工人数',
-  `YOUXIANDJ` char(4) DEFAULT NULL COMMENT '优先等级',
-  `ZHUCEZB` varchar(30) DEFAULT NULL COMMENT '注册资本（万元）',
-  `ZHUCEZBINT` double(20,2) DEFAULT NULL COMMENT '注册资本-数字',
-  `ZHUCEZT` varchar(50) DEFAULT NULL COMMENT '注册状态',
-  `FADINGDBR` varchar(100) DEFAULT NULL COMMENT '法定代表人',
-  `CHENGLISJ` varchar(30) DEFAULT NULL COMMENT '成立时间',
-  `ZHUCEDZ` varchar(300) DEFAULT NULL COMMENT '注册地址',
-  `LEIXING` int DEFAULT NULL COMMENT '(公司类型，1-大陆企业  2-港澳台  3-外资 4-国有)',
-  `CREATE_TIME` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '登记时间',
-  `DIANHUA` varchar(60) DEFAULT NULL COMMENT '电话',
-  `LIANXIDH` text COMMENT '联系电话',
-  `LIANXIYX` varchar(80) DEFAULT NULL COMMENT '联系邮箱',
-  `TONGYIXYDM` varchar(50) DEFAULT NULL COMMENT '统一信用代码',
-  `NASHUIRSBH` varchar(50) DEFAULT NULL COMMENT '纳税人识别号',
-  `GONGSHANGZCH` varchar(30) DEFAULT NULL COMMENT '工商注册号',
-  `ZUZHIJGDM` varchar(50) DEFAULT NULL COMMENT '组织机构代码',
-  `GONGSILX` varchar(80) DEFAULT NULL COMMENT '公司类型',
-  `GONGSIWZ` varchar(300) DEFAULT NULL COMMENT '公司网址',
-  `QIYEJJ` text COMMENT '企业简介',
-  `FINACELINK` varchar(500) DEFAULT NULL COMMENT '业务亮点拼接',
-  `YINGYEQX` varchar(50) DEFAULT NULL COMMENT '营业期限',
-  `TONGXINDZ` varchar(300) DEFAULT NULL COMMENT '通信地址',
-  `IS_GX` char(6) DEFAULT NULL COMMENT '联系方式数量',
-  `IS_BZ` char(1) DEFAULT NULL COMMENT '标准制定c',
-  `IS_ZX` char(1) DEFAULT NULL COMMENT '专项证照d',
-  `IS_ZF` char(1) DEFAULT NULL COMMENT '政府奖励b',
-  `DIANHUAS` varchar(5) DEFAULT NULL COMMENT '1表示已经对接，0表示未对接',
-  `TAX` double(20,0) DEFAULT '0' COMMENT '是否失信企业（1是，0否）',
-  `RANKWEIGHT` double(20,4) DEFAULT '0.0000' COMMENT '是否A级纳税企业（1是，0否）',
-  `ISINVEST` varchar(5) DEFAULT '否' COMMENT '是否有投资信息或购买其他公司股权（是、否）',
-  `ISGUARANTY` varchar(5) DEFAULT '否' COMMENT '是否有对外提供担保信息（是、否）',
-  `LOCATIONS` varchar(30) DEFAULT NULL COMMENT '经纬度',
-  `longitude` double(20,15) DEFAULT NULL,
-  `latitude` double(20,15) DEFAULT NULL,
-  PRIMARY KEY (`ID`) USING BTREE,
-  UNIQUE KEY `name_index` (`NAME`) USING BTREE,
-  KEY `sf_index` (`SUOSHUSF`) USING BTREE,
-  KEY `RANKWEIGHT` (`RANKWEIGHT`) USING BTREE,
-  KEY `erjihy_index` (`SUOSHUEJHY`,`ZIBENSCDY`) USING BTREE,
-  KEY `suoshuhy` (`SUOSHUHY`) USING BTREE,
-  KEY `zibdy` (`ZIBENSCDY`) USING BTREE,
-  KEY `youxiandj` (`YOUXIANDJ`) USING BTREE,
-  KEY `leixing` (`LEIXING`,`YOUXIANDJ`,`ZHUCEZBINT`) USING BTREE,
-  KEY `locations` (`longitude`,`latitude`) USING BTREE,
-  KEY `pz_index` (`ZHUCEZBINT`) USING BTREE,
-  KEY `dz_index` (`ZHUCEDZ`) USING BTREE
-) ENGINE=MyISAM AUTO_INCREMENT=1263977826 DEFAULT CHARSET=utf8mb3 COMMENT='企业-基本信息' |
-"""
-argv = ['aioSpider', 'genModel', 'aaa']
+class AioSpiderOptionsO(AioSpiderOptions):
+    def __init__(self):
+        self.p = '-o'
 
 
-if argv[1] == 'createProject':
-    create_project(argv[2])
+class AioSpiderOptionsH(AioSpiderOptions):
+    def __init__(self):
+        self.p = '-h'
 
-elif argv[1] == 'genSpider':
-    gen_spider(argv)
 
-elif argv[1] == 'genModel':
-    gen_model(args)
+class AioSpiderCommandName:
+    """声明命令模式接口"""
+
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.name
+
+
+class AioSpiderCommand(metaclass=ABCMeta):
+    """声明命令模式接口"""
+
+    @abstractmethod
+    def execute(self):
+        pass
+
+
+class HelpCommand(AioSpiderCommand):
+
+    def execute(self):
+        print("""
+        aioSpider帮助系统语法：aioSpider [action] [-argv] 
+        
+        aioSpider -h: 查看帮助
+        aioSpider create -argv <name> [params]
+            -argv:
+                -p: 创建项目(project)
+                    exp: aioSpider create -p baiduSpiderProject
+                -s: 创建爬虫(spider)
+                    exp: aioSpider create -s baiduSpider
+                    exp: aioSpider create -s baiduSpider https://wwww.baidu.com
+        aioSpider make sth -argv
+            sth:
+                model : 将 sql 中的建表语句转换成 AioSpider 的 models
+                    exp: aioSpider make model -i D:\\create_table.txt
+                    exp: aioSpider make model -i D:\\create_table.txt -o D:\\model.py
+                spider: 将 curl 脚本转换成 AioSpider 的 spider 
+                    exp: aioSpider make spider -i D:\\curl.txt
+                    exp: aioSpider make spider -i D:\\curl.txt -o D:\\spider.py
+            -argv:
+                -i: 输入路径(inputPath)
+                -o: 输出路径(outputPath)
+        """)
+
+    def add_name(self, *args, **kwargs):
+        pass
+
+    def add_option(self, *args, **kwargs):
+        pass
+
+
+class CreateCommand(AioSpiderCommand):
+
+    def __init__(self):
+        self.names = []
+        self.options = None
+
+    def execute(self):
+        if isinstance(self.options, AioSpiderOptionsP):
+            self.create_project()
+        elif isinstance(self.options, AioSpiderOptionsS):
+            self.create_spider()
+        else:
+            raise Exception(f'options error, AioSpider create 没有该参数，AioSpider {AioSpiderOptionsH()} 查看帮助')
+
+    def create_project(self):
+        """创建项目: aioSpider create -p <name>"""
+
+        if not self.names:
+            raise Exception(
+                f'aioSpider create -p <name>, Do you forget inout project name? AioSpider {AioSpiderOptionsH()} 查看帮助'
+            )
+
+        items = cpj(self.names[0])
+
+        for item in items:
+            if item['type'] == 'dir' and not item['path'].exists():
+                item['path'].mkdir(parents=True, exist_ok=True)
+
+        for item in items:
+            if item['type'] == 'file' and not item['path'].exists():
+                item['path'].write_text(item['text'], encoding='utf-8')
+
+    def create_spider(self):
+        """创建爬虫 aioSpider create -s <name> <start_url>"""
+
+        if not self.names:
+            raise Exception(
+                f'aioSpider create -p <name>, Do you forget inout project name? AioSpider {AioSpiderOptionsH()} 查看帮助'
+            )
+
+        if len(self.names) >= 2:
+            name, *start_url = self.names
+        else:
+            name, start_url = self.names[0], None
+
+        spider_text = gs(name, start_url)
+        path = Path().cwd() / f'spider/{name}.py'
+        if not path.exists():
+            path.write_text(spider_text, encoding='utf-8')
+
+    def add_name(self, name: AioSpiderCommandName):
+        self.names.append(name)
+
+    def add_option(self, option: AioSpiderOptions):
+        if self.options is None:
+            self.options = option
+
+
+class MakeCommand(AioSpiderCommand):
+
+    def __init__(self):
+        self.names = []
+        self.options = []
+
+    def execute(self):
+
+        if not self.names:
+            raise Exception(f'AioSpider make error，AioSpider {AioSpiderOptionsH()} 查看帮助')
+        elif self.names[0].name == 'model':
+            self.names = self.names[1:]
+            self.make_model()
+        elif self.names[0].name == 'spider':
+            self.names = self.names[1:]
+            self.make_spider()
+        else:
+            raise Exception(f'AioSpider make error，AioSpider {AioSpiderOptionsH()} 查看帮助')
+
+    def make_model(self):
+        """sql转换成模型 aioSpider make model -i sqlFilePath -o <outPath>"""
+
+        in_path = out_path = None
+        for i, o in enumerate(self.options):
+            if isinstance(o, AioSpiderOptionsI):
+                in_path = Path(self.names[i].name)
+            elif isinstance(o, AioSpiderOptionsO):
+                out_path = Path(self.names[i].name)
+            else:
+                continue
+
+        if in_path is None:
+            raise Exception(f'AioSpider make error，no sql input. AioSpider {AioSpiderOptionsH()} 查看帮助')
+
+        sql = in_path.read_text(encoding='utf-8')
+
+        if 'create' not in sql and 'CREATE' not in sql:
+            raise Exception('请输入正确的sql语句，ex: CREATE TABLE xxx ...')
+
+        table = re.findall(r'TABLE(.*?)\(', sql) or re.findall(r'table(.*?)\(', sql)
+        if table:
+            table = table[0].strip().replace('`', '').replace('\'', '').replace('\"', '')
+            if '_' in table:
+                table = ''.join([i.title() for i in table.split('_')])
+        else:
+            raise Exception('没有匹配到table，输入的sql有误')
+
+        field_str = re.findall(r'\((.*)\)', sql, re.S)
+        if field_str:
+            field_str = field_str[0].strip()
+        else:
+            raise Exception('没有匹配到创建的字段，输入的sql有误')
+
+        model_str = f'from AioSpider import models\n\n\nclass {table}Model(models.Model):\n'
+        for f in field_str.split('\n'):
+            x = f.strip().split()
+            name = x[0].replace('`', '').replace('\'', '').replace('\"', '')
+
+            if 'comment' in f.lower():
+                comment = re.findall('comment(.*),', f.lower())
+                comment = comment[0] if comment else name
+                comment = comment.strip().replace('`', '').replace('\'', '').replace('\"', '')
+            else:
+                comment = name
+
+            if name in ['PRIMARY', 'UNIQUE', 'KEY', 'primary', 'unique']:
+                continue
+
+            if 'not null' in f.lower():
+                null = False
+            else:
+                null = True
+
+            if 'unique' in f.lower():
+                unique = True
+                dnt_filter = True
+            else:
+                unique = False
+                dnt_filter = False
+
+            if 'default' in f.lower():
+                default = re.findall('default (.*?) ', f.lower())
+                default = default[0] if default else None
+            else:
+                default = None
+
+            if 'int' in f.lower():
+                if 'auto_increment' in f.lower() or 'autoincrement' in f.lower():
+                    model_str += f"    {name} = models.AutoIntField(name=\"{comment}\", auto_field='AUTO_INCREMENT')\n"
+                else:
+                    if default is not None:
+                        model_str += f"    {name} = models.IntField(name=\"{comment}\", blank={null}, null={null}," \
+                                     f" default={'%s' % default if default != 'null' else None})\n"
+                    else:
+                        model_str += f"    {name} = models.IntField(name=\"{comment}\", blank={null}, null={null})\n"
+
+            if 'float' in f.lower() or 'double' in f.lower() or 'decimal' in f.lower():
+                if default is not None:
+                    model_str += f"    {name} = models.FloatField(name=\"{comment}\", blank={null}, null={null}, " \
+                                 f"default={'%s' % default if default != 'null' else None})\n"
+                else:
+                    model_str += f"    {name} = models.IntField(name=\"{comment}\", blank={null}, null={null})\n"
+
+            if 'varchar' in f.lower() or 'char' in f.lower():
+                max_length = re.findall(r'varchar\(([\d]+)\)', f.lower())
+                max_length = max_length[0] if max_length else 255
+
+                if default is not None:
+                    if dnt_filter:
+                        model_str += f"    {name} = models.CharField(\n{' ' * 8}name=\"{comment}\", max_length=" \
+                                     f"{max_length}, blank={null}, null={null}, default=" \
+                                     f"{'%s' % default if default != 'null' else None}, unique={unique}, " \
+                                     f"dnt_filter={dnt_filter}\n{' ' * 4})\n"
+                    else:
+                        model_str += f"    {name} = models.CharField(\n{' ' * 8}name=\"{comment}\", max_length=" \
+                                     f"{max_length}, blank={null}, null={null}, default=" \
+                                     f"{'%s' % default if default != 'null' else None}, unique={unique}\n{' ' * 4})\n"
+                else:
+                    if dnt_filter:
+                        model_str += f"    {name} = models.CharField(\n{' ' * 8}name=\"{comment}\", max_length=" \
+                                     f"{max_length}, blank={null}, null={null}, unique={unique}, dnt_filter=" \
+                                     f"{dnt_filter}\n{' ' * 4})\n"
+                    else:
+                        model_str += f"    {name} = models.CharField(\n{' ' * 8}name=\"{comment}\", max_length=" \
+                                     f"{max_length}, blank={null}, null={null}, unique={unique}\n{' ' * 4})\n"
+
+            if 'text' in f.lower():
+                if default is not None:
+                    model_str += f"    {name} = models.TextField(name=\"{comment}\", blank={null}, " \
+                                 f"null={null}, default={'%s' % default if default != 'null' else None}, unique={unique}, " \
+                                 f"dnt_filter={dnt_filter})\n"
+                else:
+                    model_str += f"    {name} = models.TextField(name=\"{comment}\", blank={null}," \
+                                 f" null={null}, unique={unique}, dnt_filter={dnt_filter})\n"
+
+            if 'datetime' in f.lower():
+                if default is not None:
+                    model_str += f"    {name} = models.DateTimeField(name=\"{comment}\")\n"
+                else:
+                    model_str += f"    {name} = models.DateTimeField(name=\"{comment}\")\n"
+
+            if 'date' in f.lower():
+                if default is not None:
+                    model_str += f"    {name} = models.DateField(name=\"{comment}\")\n"
+                else:
+                    model_str += f"    {name} = models.DateField(name=\"{comment}\")\n"
+
+        out_path = out_path if out_path is not None else Path(f'{table}.py')
+        out_path.write_text(model_str, encoding='utf-8')
+
+    def make_spider(self):
+        """curl 转换成 spider：aioSpider make spider -i <inputPath> -o <outPath>"""
+
+        in_path = out_path = None
+        for i, o in enumerate(self.options):
+            if isinstance(o, AioSpiderOptionsI):
+                in_path = Path(self.names[i].name)
+            elif isinstance(o, AioSpiderOptionsO):
+                out_path = Path(self.names[i].name)
+            else:
+                continue
+
+        if in_path is None:
+            raise Exception(f'AioSpider make error，no curl input. AioSpider {AioSpiderOptionsH()} 查看帮助')
+
+        curl = in_path.read_text(encoding='utf-8')
+
+        url = re.findall('curl \'(.*?)\'', curl)
+        if url:
+            url = url[0]
+        else:
+            raise Exception('没有匹配到url')
+
+        params = tools.extract_params(url)
+        url = tools.extract_url(url)
+
+        try:
+            headers = {
+                i.split(': ')[0].strip().replace('\n', '').replace('\r', '').replace('  ', ''):
+                    i.split(': ')[-1].strip().replace('\n', '').replace('\r', '').replace('  ', '')
+                for i in re.findall('-H \'(.*?)\'', curl, re.S)}
+        except:
+            headers = None
+
+        body = re.findall('--data-binary \'(.*?)\'', curl, re.S)
+        if body:
+            body = body[0]
+        else:
+            body = None
+
+        tmp = 'from AioSpider import tools\nfrom AioSpider.http import Request, FormRequest\nfrom AioSpider.spider import' \
+              f' Spider\n\n\nclass DemoSpider(Spider):\n\n    name = "demoSpider"\n    start_urls = [\n{" " * 8}"{url}"\n' \
+              f'{" " * 4}]\n\n    def start_request(self):\n{" " * 8}for url in self.start_urls:\n{" " * 12}yield ' \
+              f'{"FormRequest" if body else "Request"}(\n{" " * 16}url=url, \n{" " * 16}callback=self.parse'
+
+        if headers:
+            tmp += f",\n{' ' * 16}headers={headers}"
+
+        if params:
+            tmp += f",\n{' ' * 16}params={params}"
+
+        if body:
+            tmp += f",\n{' ' * 16}body={body}"
+
+        tmp += f'\n{" " * 12})\n\n{" " * 4}def parse(self, response):\n{" " * 8}self.logger(response)\n\n\nif __name_' \
+               f'_ == "__main__":\n{" " * 4}spider = DemoSpider()\n{" " * 4}spider.start()'
+
+        out_path = out_path if out_path is not None else Path('demoSpider.py')
+        out_path.write_text(tmp, encoding='utf-8')
+
+    def add_name(self, name: AioSpiderCommandName):
+        self.names.append(name)
+
+    def add_option(self, option: AioSpiderOptions):
+        self.options.append(option)
+
+
+class Client:
+
+    def __init__(self, argv: list):
+        """装配者"""
+
+        if not isinstance(argv, list):
+            raise Exception(f'aioSpider command error, aioSpider {AioSpiderOptionsH()} 查看帮助')
+
+        if len(argv) <= 1:
+            raise Exception(f'aioSpider command error, aioSpider {AioSpiderOptionsH()} 查看帮助')
+
+        if argv[0].rstrip('.py') != 'aioSpider':
+            raise Exception(f'aioSpider command error, aioSpider {AioSpiderOptionsH()} 查看帮助')
+
+        if argv[1] == 'create':
+            argv = argv[2:]
+            cmd = CreateCommand()
+        elif argv[1] == 'make':
+            argv = argv[2:]
+            cmd = MakeCommand()
+        elif argv[1] == '-h':
+            argv = argv[2:]
+            cmd = HelpCommand()
+        else:
+            raise Exception(f'aioSpider command error, aioSpider {AioSpiderOptionsH()} 查看帮助')
+
+        for i in argv:
+            if '-' in i:
+                if i == '-p':
+                    cmd.add_option(AioSpiderOptionsP())
+                elif i == '-s':
+                    cmd.add_option(AioSpiderOptionsS())
+                elif i == '-i':
+                    cmd.add_option(AioSpiderOptionsI())
+                elif i == '-o':
+                    cmd.add_option(AioSpiderOptionsO())
+            else:
+                cmd.add_name(AioSpiderCommandName(i))
+
+        cmd.execute()
+
+
+# argv = sys.argv
+# argv = ['aioSpider', 'make', 'model', '-i', r'C:\apps\PyCharm\project\zly\companyspider\utils\table.txt']
+argv = ['aioSpider', 'make', 'spider', '-i', r'C:\apps\PyCharm\project\zly\companyspider\utils\curl.txt']
+Client(argv)
+
