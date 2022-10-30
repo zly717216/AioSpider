@@ -1,7 +1,7 @@
 import re
 import time
 import asyncio
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Union
 
 import aiomysql
 from AioSpider import AioObject, GlobalConstant
@@ -92,6 +92,68 @@ class MySQLAPI(AioObject):
     def _from_sql_table(self, sql):
         table = re.findall('table(.*?)\(', sql) or  re.findall('TABLE(.*?)\(', sql)
         return table[0].strip() if table else None
+
+    def _make_select_sql(
+            self, table: str, field: Union[list, tuple, str, None] = None, count: Optional[int] = None,
+            offset: Optional[int] = None, desc: bool = False, order: Union[list, tuple, list] = None,
+            where: Optional[dict] = None
+    ) -> str:
+        """
+            生成查询语句
+            @params:
+                table: 表名
+                field: 查询字段约束
+                count: 数量
+                offset: 偏移量
+                desc: 是否倒序
+                where: 查询条件，dict -> {字段名1: 字段值1, 字段名2: 字段值2}
+        """
+
+        def _func(sql):
+
+            if order is None:
+                pass
+            elif isinstance(order, str):
+                sql += f' ORDER BY {order}'
+            elif isinstance(order, (list, tuple)):
+                sql += f' ORDER BY {",".join(order)}'
+            else:
+                raise TypeError(f'order 参数类型错误，当前类型为：{type(field)}')
+
+            if desc and order is not None:
+                sql += ' DESC'
+
+            if count is not None:
+                sql += f' LIMIT {count}'
+
+            if offset is not None:
+                sql += f' OFFSET {offset}'
+
+            return sql
+
+        if field is None:
+            sql = f'SELECT * FROM {table}'
+        elif isinstance(field, str):
+            sql = f'SELECT {field} FROM {table}'
+        elif isinstance(field, (list, tuple)):
+            sql = f'SELECT {",".join(field)} FROM {table}'
+        else:
+            raise TypeError(f'field 参数类型错误，当前类型为：{type(field)}')
+
+        if where is None:
+            return _func(sql)
+
+        where_list = []
+        for k, v in where.items():
+            if isinstance(v, str):
+                where_list.append(f'{k}="{v}"')
+            else:
+                where_list.append(f'{k}={v}')
+
+        sql += ' WHERE '
+        sql += ' and '.join(where_list)
+
+        return _func(sql)
 
     async def create_table(
             self, table: Optional[str] = None, fields: Optional[dict] = None,
@@ -191,39 +253,52 @@ class MySQLAPI(AioObject):
                     return await cur.fetchall()
 
     async def find_one(
-            self, table: Optional[str] = None, field: Optional[Iterable] = None,
+            self, table: Optional[str] = None, field: Union[list, tuple, str, None] = None,
+            offset: Optional[int] = None, desc: bool=False, order: Union[list, tuple, str, None] = None, 
             where: Optional[dict] = None, sql: Optional[str] = None
     ) -> list:
         """
             查询一条数据
             @params:
                 table: 表名
-                field: 查询字段
+                field: 查询字段约束
+                offset: 偏移量
+                order: 排序约束
+                desc: 是否倒序
                 where: 查询条件，dict -> {字段名1: 字段值1, 字段名2: 字段值2}
                 sql: 原始sql语句，当sql参数不为None时，table、field、where无效
         """
 
         if sql is None:
-            sql = self._make_select_sql(table, field=field, where=where)
+            sql = self._make_select_sql(
+                table, field=field, count=count, offset=offset, desc=desc, order=order, where=where
+            )
 
         return await self._get(sql)
 
     async def find_many(
-            self, table: Optional[str] = None, field: Optional[Iterable] = None,
-            where: Optional[dict] = None, sql: Optional[str] = None
+            self, table: Optional[str] = None, field: Union[list, tuple, str, None] = None,
+            count: Optional[int] = None, offset: Optional[int] = None, desc: bool=False,
+            order: Union[list, tuple, str, None] = None, where: Optional[dict] = None,
+            sql: Optional[str] = None
     ) -> list:
         """
             查询多条数据
             @params:
                 table: 表名
-                field: 查询字段
+                field: 查询字段约束
+                count: 数量
+                offset: 偏移量
+                order: 排序约束
+                desc: 是否倒序
                 where: 查询条件，dict -> {字段名1: 字段值1, 字段名2: 字段值2}
                 sql: 原始sql语句，当sql参数不为None时，table、field、where无效
-                to_serializ: 是否序列化
         """
 
         if sql is None:
-            sql = self._make_select_sql(table, field=field, where=where)
+            sql = self._make_select_sql(
+                table, field=field, count=count, offset=offset, order=order, desc=desc, where=where
+            )
 
         return await self._get(sql)
 

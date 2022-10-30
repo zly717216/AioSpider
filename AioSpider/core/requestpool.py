@@ -411,7 +411,7 @@ class RequestDB(AioObject):
 
     async def _dumps_request(self):
         cache_settings = getattr(GlobalConstant().settings, 'CACHED_REQUEST', {})
-        if cache_settings:
+        if cache_settings and cache_settings.get('CACHED'):
             if cache_settings.get('FILTER_FOREVER', False):
                 expire = 100 * 365 * 24 * 60 * 60
             else:

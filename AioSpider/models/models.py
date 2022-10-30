@@ -245,8 +245,8 @@ class Model:
 
         attr = [i for i in dir(self) if isinstance(getattr(self, i), Field)]
 
-        if self._order and isinstance(self._order, list):
-            order = self._order
+        if self._order() and hasattr(self._order(), '__iter__'):
+            order = self._order()
             for i in attr:
                 if i not in order:
                     order.append(i)
