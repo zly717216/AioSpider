@@ -1,4 +1,6 @@
 import time
+from typing import Optional
+import cchardet
 
 import pymysql
 
@@ -10,7 +12,7 @@ class MySQLAPI:
     engine = 'mysql'
 
     def __init__(
-            self, *, host: str, database: str, user: str | None = None, password: str | None = None,
+            self, *, host: str, database: str, user: Optional[str] = None, password: Optional[str] = None,
             port: int = 3306, max_idle_time: int = 5 * 60 * 60, connect_timeout=5, time_zone: str = "+0:00",
             charset: str = "utf8mb4", sql_mode: str = "TRADITIONAL"
     ):

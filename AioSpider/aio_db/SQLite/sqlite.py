@@ -1,17 +1,17 @@
-import re
 import asyncio
 from typing import Optional, Iterable, Union
 
-import aiosqlite
-from AioSpider import AioObject, GlobalConstant
+from AioSpider.aio_db.abc_db import ABCDB
+from AioSpider.utils_pkg import aiosqlite
+from AioSpider import AioObject, GlobalConstant, tools
 
 
-class SQLiteAPI(AioObject):
+class SQLiteAPI(ABCDB, AioObject):
     """sqlite 增删改查API"""
 
     engine = 'sqlite'
 
-    async def __init__(self, path, timeout=None):
+    async def __init__(self, path: str, timeout: Optional[int] = None):
         self.conn = await aiosqlite.connect(database=path, iter_chunk_size=64, timeout=timeout)
         self._logger = GlobalConstant().logger
 
@@ -132,7 +132,7 @@ class SQLiteAPI(AioObject):
             return []
 
     def _from_sql_table(self, sql):
-        table = re.findall('table(.*?)\(', sql) or  re.findall('TABLE(.*?)\(', sql)
+        table = tools.re(regx='table(.*?)\(', text=sql) or tools.re(regx='TABLE(.*?)\(', text=sql)
         return table[0].strip() if table else None
 
     async def table_exist(self, table: str):

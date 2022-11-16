@@ -18,7 +18,7 @@ from AioSpider.core.scheduler import Scheduler
 from AioSpider.db import MongoAPI
 from AioSpider.aio_db import SQLiteAPI, CSVFile, MySQLAPI
 from AioSpider.middleware import FirstMiddleware, LastMiddleware
-from AioSpider.models import DataLoader
+from AioSpider.models import DataManager
 from AioSpider import settings, init_logger, GlobalConstant, tools
 
 
@@ -34,14 +34,16 @@ class Engine:
         self.scheduler = None
         self.middleware = None
         self.downloader = None
-        self.dataloader = None
+        self.datamanager = None
 
         self.loop = asyncio.get_event_loop()                  # 开始事件循环
 
     def _read_settings(self):
 
         # 项目settings
-        sts = import_module(str(Path().cwd().parent.name) + '.settings')
+        sts = import_module(
+            (Path().cwd().parent.name or Path().cwd().name) + '.settings'
+        )
 
         # 爬虫settings   优先级：爬虫settings > 项目settings > 系统settings
         for i in dir(sts):
@@ -64,7 +66,6 @@ class Engine:
             sts = settings.LOGGING
 
         if not sts.get('LOG_NAME'):
-            warnings.warn("logger的'name'属性必须为非空str类型，日志名称设置无效，将使用默认名'aioSpider'作为日志名称")
             sts['LOG_NAME'] = self.spider.name
 
         if sts.get('LOG_IS_FILE'):
@@ -186,14 +187,14 @@ class Engine:
 
     async def _init_dataloader(self):
 
-        dataloader = DataLoader(getattr(self.settings, 'CAPACITY', 10000 * 10000))
-        GlobalConstant().dataloader = dataloader
+        data_manager = DataManager(
+            capacity=getattr(self.settings, 'CAPACITY', 10000 * 10000)
+        )
+        GlobalConstant().datamanager = data_manager
+        self.logger.info(f'数据管理器已启动，加载到 {len(data_manager.models)} 个模型，{pformat(data_manager.models)}')
 
-        # 去重
-        if getattr(self.settings, 'DATA_FILTER_ENABLE', False):
-            await dataloader._load_data()
-
-        return dataloader
+        await data_manager.open()
+        return data_manager
 
     async def _open(self):
 
@@ -203,7 +204,7 @@ class Engine:
         self.scheduler = await Scheduler()
         self.middleware = self._init_middleware()
         self.downloader = Downloader(self.middleware, self.settings)
-        self.dataloader = await self._init_dataloader()
+        self.datamanager = await self._init_dataloader()
 
         self.spider.spider_open()
         for p in self.pipeline:
@@ -215,6 +216,7 @@ class Engine:
             p.spider_close()
 
         await self.scheduler.close()
+        await self.datamanager.close()
 
         while True:
             if len(asyncio.all_tasks(self.loop)) <= 1:
@@ -252,9 +254,14 @@ class Engine:
         start_time = datetime.now()
         await self._open()
 
+        con_sts = getattr(self.settings, 'CONNECT_POOL', {})
         connector = aiohttp.TCPConnector(
-            limit=getattr(self.settings, 'MAX_CONNECT_COUNT', 100),
-            use_dns_cache=getattr(self.settings, 'USE_DNS_CACHE', True)
+            limit=con_sts.get('MAX_CONNECT_COUNT', 100),
+            use_dns_cache=con_sts.get('USE_DNS_CACHE', True),
+            force_close=con_sts.get('FORCE_CLOSE', False),
+            ttl_dns_cache=con_sts.get('TTL_DNS_CACHE', 10),
+            limit_per_host=con_sts.get('LIMIT_PER_HOST', 0),
+            verify_ssl=con_sts.get('VERIFY_SSL', True)
         )
 
         async with aiohttp.ClientSession(connector=connector) as s:
@@ -317,13 +324,8 @@ class Engine:
 
             # 如果取出来的不是请求 忽略
             if isinstance(request, Request):
-                # 上锁 保证前面设置的并发量生效 每次上锁value值会减一
-                # 但是value值是不能低于0的 value等于0就会造成阻塞 --> 从而可以实现并发的控制
-                await semaphore.acquire()
-                # 创建任务 注册到事件循环中
-                self.loop.create_task(self._process_request(request, semaphore))
-
-            continue
+                async with semaphore:
+                    asyncio.create_task(self._process_request(request, semaphore))
 
     @staticmethod
     async def heart_beat(sleep_time):
@@ -345,9 +347,6 @@ class Engine:
             self.loop.create_task(self._process_request(http_obj, semaphore))
         else:
             pass
-
-        # 释放锁资源 释放的时候 value的值会增加一 (+1)
-        semaphore.release()
 
     async def download(self, request):
         """ 下载请求 """

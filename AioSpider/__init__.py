@@ -12,7 +12,7 @@ sys.path.append(str(Path().cwd().parent.parent))
 class GlobalConstant:
 
     _settings = None
-    _dataloader = None
+    _datamanager = None
     _database = None
     _session = None
     _pipelines = None
@@ -39,8 +39,8 @@ class GlobalConstant:
         return self._settings
 
     @property
-    def dataloader(self):
-        return self._dataloader
+    def datamanager(self):
+        return self._datamanager
 
     @property
     def database(self):
@@ -66,9 +66,9 @@ class GlobalConstant:
     def settings(self, k):
         self._settings = k
 
-    @dataloader.setter
-    def dataloader(self, k):
-        self._dataloader = k
+    @datamanager.setter
+    def datamanager(self, k):
+        self._datamanager = k
 
     @database.setter
     def database(self, k):

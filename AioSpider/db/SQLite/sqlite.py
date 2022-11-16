@@ -7,7 +7,7 @@ class SQLiteAPI:
 
     engine = 'sqlite'
 
-    def __init__(self, path, timeout=10):
+    def __init__(self, path: str, timeout: Optional[int] = None):
         self.conn = sqlite3.connect(database=path, timeout=timeout)
 
     def _cursor(self):

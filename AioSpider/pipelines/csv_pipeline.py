@@ -18,7 +18,7 @@ class CSVFilePipeline(Pipeline):
         pass
 
     def spider_close(self):
-        asyncio.create_task(getattr(self._models, self.model)._close())
+        pass
 
     async def process_item(self, item):
 

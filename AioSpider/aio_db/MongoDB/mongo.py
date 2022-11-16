@@ -1,11 +1,17 @@
+from typing import Optional
 import pymongo
 
+from AioSpider.aio_db.abc_db import ABCDB
 
-class MongoAPI:
+
+class MongoAPI(ABCDB):
 
     engine = 'mongo'
 
-    def __init__(self, host='127.0.0.1', port=27017, db='bond', username=None, password=None):
+    def __init__(
+            self, host: str = '127.0.0.1', port: int = 27017, db: Optional[str] = None,
+            username: Optional[str] = None, password: Optional[str] = None
+    ):
 
         client = pymongo.MongoClient(host=host, port=port, username=username, password=password)
         self.db = client[db]

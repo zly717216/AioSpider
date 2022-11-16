@@ -1,8 +1,8 @@
 import re
-import execjs
 from pprint import pformat
 
 from AioSpider.parse import Parse
+from AioSpider.utils_pkg import execjs
 from .request import Request
 
 

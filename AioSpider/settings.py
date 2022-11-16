@@ -53,12 +53,19 @@ LOGGING = {
 
 # ---------------------------------- 爬虫相关配置 ---------------------------------- #
 
-REQUEST_CONCURRENCY_COUNT = 240     # 请求并发数
-MAX_CONNECT_COUNT = 100             # 请求最大连接数
-NO_REQUEST_SLEEP_TIME = 3           # 求情队列无请求时休眠时间
-REQUEST_CONCURRENCY_SLEEP = 0       # 单位秒，每 REQUEST_CONCURRENCY_COUNT 个请求休眠1秒
-PER_REQUEST_SLEEP = 0               # 单位秒，每并发1个请求时休眠1秒
-REQUEST_TIMEOUT = 300               # 请求最大超时时间
+REQUEST_CONCURRENCY_COUNT = 240         # 请求并发数
+CONNECT_POOL = {
+    'MAX_CONNECT_COUNT': 200,           # 请求最大连接数，指定为 True 时无限制
+    'USE_DNS_CACHE': True,              # 使用内部DNS映射缓存，用来查询DNS，使建立连接速度更快
+    'TTL_DNS_CACHE': 10,                # 查询过的DNS条目的失效时间，None表示永不失效
+    'FORCE_CLOSE': False,               # 连接释放后关闭底层网络套接字
+    'VERIFY_SSL': True,                 # ssl证书验证
+    'LIMIT_PER_HOST': 0,                # 同一端点并发连接总数，同一端点是具有相同 host、port、ssl 信息，如果是0则不做限制
+}
+NO_REQUEST_SLEEP_TIME = 3               # 求情队列无请求时休眠时间
+REQUEST_CONCURRENCY_SLEEP = 0           # 单位秒，每 REQUEST_CONCURRENCY_COUNT 个请求休眠1秒
+PER_REQUEST_SLEEP = 0                   # 单位秒，每并发1个请求时休眠1秒
+REQUEST_TIMEOUT = 300                   # 请求最大超时时间
 
 # 请求失败是否要重试
 RETRY_ENABLE = True
@@ -75,12 +82,12 @@ HEADERS = {
     "accept-encoding": "gzip, deflate, br",
     "accept-language": "zh-CN,zh;q=0.9",
 }
-RANDOM_HEADERS = True               # 随机UserAgent
-RETRY_FAILED_REQUESTS = False       # 爬虫启动时，重新抓取失败的requests
+RANDOM_HEADERS = True                   # 随机UserAgent
+RETRY_FAILED_REQUESTS = False           # 爬虫启动时，重新抓取失败的requests
 # 字符串类型或可迭代对象，值为chrome, ie, opera, firefox, ff, safari，若指定RANDOM_HEADERS为True时则不生效
 USER_AGENT_TYPE = UserAgent.CHROME
 
-REQUEST_PROXY = None  # 代理 支持http和https，默认为NNone，不设置代理，需要设置则可以按照以下格式设置
+REQUEST_PROXY = None                    # 代理 支持http和https，默认为NNone，不设置代理，需要设置则可以按照以下格式设置
 # REQUEST_PROXY = 'http://127.0.0.1:7890'
 # REQUEST_PROXY = '127.0.0.1:7890'
 
@@ -95,6 +102,8 @@ DOWNLOAD_MIDDLEWARE = {
 
 # 数据管道
 ITEM_PIPELINES = {}
+
+COMMIT_SIZE = 1000                          # 数据每批提交保存的数量
 
 # 数据去重
 DATA_FILTER_ENABLE = True                   # 是否启用数据去重
@@ -114,8 +123,6 @@ CACHED_REQUEST = {
 
 IGNORE_STAMP = True                         # 去重忽略时间戳
 STAMP_NAMES = []                            # 时间戳字段名，一般指请求中params、data中的参数
-
-USE_DNS_CACHE = True                        # 使用内部DNS映射缓存，用来查询DNS，使建立连接速度更快
 
 # -------------------------------------------------------------------------------- #
 

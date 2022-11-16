@@ -1,18 +1,18 @@
-import re
 import time
 import asyncio
 from typing import Optional, Iterable, Union
 
-import aiomysql
-from AioSpider import AioObject, GlobalConstant
+from AioSpider.aio_db.abc_db import ABCDB
+from AioSpider.utils_pkg import aiomysql
+from AioSpider import AioObject, GlobalConstant, tools
 
 
-class MySQLAPI(AioObject):
+class MySQLAPI(ABCDB, AioObject):
 
     engine = 'mysql'
 
     async def __init__(
-            self, *, host: str, db: str, user: str | None = None, password: str | None = None,
+            self, *, host: str, db: str, user: Optional[str] = None, password: Optional[str] = None,
             port: int = 3306, max_idle_time: int = 5 * 60 * 60, connect_timeout=5, time_zone: str = "+0:00",
             charset: str = "utf8mb4", sql_mode: str = "TRADITIONAL"
     ):
@@ -90,7 +90,7 @@ class MySQLAPI(AioObject):
         return sql
 
     def _from_sql_table(self, sql):
-        table = re.findall('table(.*?)\(', sql) or  re.findall('TABLE(.*?)\(', sql)
+        table = tools.re(regx='table(.*?)\(', text=sql) or tools.re(regx='TABLE(.*?)\(', text=sql)
         return table[0].strip() if table else None
 
     def _make_select_sql(

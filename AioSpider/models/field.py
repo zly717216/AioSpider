@@ -22,7 +22,7 @@ class Field:
         self.default = default
         self.choices = choices
         self.db_index = db_index
-        self.db_column = db_column or name
+        self.db_column = db_column
         self.is_save = is_save
         self.dnt_filter = dnt_filter
 
@@ -32,8 +32,8 @@ class Field:
 
     def _check(self, field: str):
 
-        if self._check_name() and self._check_max_length() and self._check_default()\
-                and self._check_choices() and self._check_unique() and self._check_blank()\
+        if self._check_name() and self._check_max_length() and self._check_default() \
+                and self._check_choices() and self._check_unique() and self._check_blank() \
                 and self._check_null() and self._check_db_index() and self._check_is_save() \
                 and self._check_db_column():
             return True
@@ -103,6 +103,9 @@ class Field:
 
     def _check_db_column(self):
 
+        if self.db_column is None:
+            return True
+
         if not isinstance(self.db_column, str):
             self._message.append('db_column字段必须为str类型')
             return False
@@ -113,7 +116,7 @@ class Field:
 
         return True
 
-    def _table_sql(self):
+    def _table_sql(self, cols=None):
         return ''
 
     def __str__(self):
@@ -202,8 +205,8 @@ class CharField(Field):
                     f'{self.name}值错误，value={self._value}, max_length is {self.max_length}, value超出最大长度范围'
                 )
 
-    def _table_sql(self):
-        sql = f'{self.db_column} VARCHAR({self.max_length})'
+    def _table_sql(self, cols=None):
+        sql = f'{self.db_column or cols or self.name} VARCHAR({self.max_length})'
         if self.null:
             sql += f' NULL'
         else:
@@ -246,8 +249,8 @@ class IntField(Field):
         if not isinstance(self._value, (int, type(None))):
             raise ValueError(f'{self.name}值错误，value={self._value}, value必须为int类型')
 
-    def _table_sql(self):
-        sql = f'{self.db_column} INTEGER '
+    def _table_sql(self, cols=None):
+        sql = f'{self.db_column or cols or self.name} INTEGER '
         if self.null:
             sql += f' NULL'
         else:
@@ -293,8 +296,8 @@ class FloatField(Field):
         if self._value is not None:
             self._value = float(Decimal(self._value).quantize(Decimal('0.000')))
 
-    def _table_sql(self):
-        sql = f'{self.db_column} FLOAT'
+    def _table_sql(self, cols=None):
+        sql = f'{self.db_column or cols or self.name} FLOAT'
         if self.null:
             sql += f' NULL'
         else:
@@ -329,8 +332,8 @@ class BoolField(Field):
         # 转换, 0 False 1 True
         self._value = 1 if self._value else 0
 
-    def _table_sql(self):
-        sql = f'{self.db_column} BOOLEAN '
+    def _table_sql(self, cols=None):
+        sql = f'{self.db_column or cols or self.name} BOOLEAN '
         if self.null:
             sql += f' NULL'
         else:
@@ -373,9 +376,9 @@ class AutoIntField(IntField):
     def _auto_increase(self):
         self.default += self.sep
 
-    def _table_sql(self):
+    def _table_sql(self, cols=None):
 
-        sql = f'{self.db_column} INTEGER NOT NULL PRIMARY KEY {self.auto_field}'
+        sql = f'{self.db_column or cols or self.name} INTEGER NOT NULL PRIMARY KEY {self.auto_field}'
         return sql
 
 
@@ -563,9 +566,9 @@ class DateField(Field):
         if not self.null and not isinstance(self._value, date):
             raise TypeError(f'类型错误：{self.name} 必须为时间类型，当前类型为：{type(self._value)}')
 
-    def _table_sql(self):
+    def _table_sql(self, cols=None):
 
-        sql = f'{self.db_column} DATE NOT NULL'
+        sql = f'{self.db_column or cols or self.name} DATE NOT NULL'
         return sql
 
 
@@ -603,9 +606,9 @@ class DateTimeField(Field):
         if not self.null and not isinstance(self._value, datetime):
             raise TypeError(f'类型错误：{self.name} 必须为时间类型，当前类型为：{type(self._value)}')
 
-    def _table_sql(self):
+    def _table_sql(self, cols=None):
 
-        sql = f'{self.db_column} DATETIME NOT NULL'
+        sql = f'{self.db_column or cols or self.name} DATETIME NOT NULL'
         return sql
 
 
@@ -645,8 +648,8 @@ class TextField(Field):
         if not isinstance(self._value, str):
             raise ValueError(f'{self.name}值错误，value={self._value}, value必须为str类型')
 
-    def _table_sql(self):
-        sql = f'{self.db_column} BLOB NULL'
+    def _table_sql(self, cols=None):
+        sql = f'{self.db_column or cols or self.name} BLOB NULL'
 
         if self.default is not None:
             sql += f' DEFAULT "{self.default}"'

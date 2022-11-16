@@ -3,10 +3,8 @@ from abc import ABCMeta, abstractmethod
 from asyncio import exceptions
 from urllib.parse import urlparse
 
-import cchardet
-
 from AioSpider import GlobalConstant
-
+from AioSpider.utils_pkg import cchardet
 
 user_agent = {
     "browsers": {

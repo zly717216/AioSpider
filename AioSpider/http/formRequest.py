@@ -1,6 +1,6 @@
 import json
 
-from w3lib.url import safe_url_string
+from AioSpider.utils_pkg.w3lib.url import safe_url_string
 from .request import Request
 
 

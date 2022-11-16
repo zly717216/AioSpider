@@ -1,15 +1,17 @@
 import csv
+from pathlib import Path
 
-import aiofiles
-from aiocsv import AsyncReader, AsyncDictReader, AsyncDictWriter
+from AioSpider.aio_db.abc_db import ABCDB
+from AioSpider.utils_pkg import aiofiles
+from AioSpider.utils_pkg.aiocsv import AsyncReader, AsyncDictReader, AsyncDictWriter
 
 
-class CSVFile:
+class CSVFile(ABCDB):
     """csv 增删改查API"""
 
     engine = 'csv'
 
-    def __init__(self, path, encoding='utf-8', write_mode='a'):
+    def __init__(self, path: Path, encoding: str = 'utf-8', write_mode: str = 'a'):
         self.path = path
         self.encoding = encoding
         self.write_mode = write_mode
@@ -73,9 +75,6 @@ class CSVFile:
         pass
 
     def modify_many(self):
-        pass
-
-    async def commit(self):
         pass
 
     def close(self):

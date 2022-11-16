@@ -1,11 +1,11 @@
 import re
 import json
-import execjs
 from pprint import pformat
 
 from lxml import etree
-
 from AioSpider.parse import ReParse, XpathParse
+from AioSpider.utils_pkg import execjs
+
 from .request import Request
 
 
