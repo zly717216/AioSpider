@@ -1503,7 +1503,7 @@ class BlockingConnectionPool(ConnectionPool):
     """
     Thread-safe blocking connection pool::
 
-        >>> from aioredis.client import Redis
+        >>> from AioSpider.utils_pkg.aioredis.client import Redis
         >>> client = Redis(connection_pool=BlockingConnectionPool())
 
     It performs the same function as the default

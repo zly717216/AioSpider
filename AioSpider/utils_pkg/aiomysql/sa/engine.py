@@ -2,14 +2,13 @@
 # https://github.com/aio-libs/aiopg/blob/master/aiopg/sa/engine.py
 import asyncio
 
-import aiomysql
+from AioSpider.utils_pkg import aiomysql
 from .connection import SAConnection
 from .exc import InvalidRequestError, ArgumentError
 from ..utils import _PoolContextManager, _PoolAcquireContextManager
 from ..cursors import (
-    Cursor, DeserializationCursor, DictCursor, SSCursor, SSDictCursor)
-
-
+    Cursor, DeserializationCursor, DictCursor, SSCursor, SSDictCursor
+)
 try:
     from sqlalchemy.dialects.mysql.pymysql import MySQLDialect_pymysql
     from sqlalchemy.dialects.mysql.mysqldb import MySQLCompiler_mysqldb

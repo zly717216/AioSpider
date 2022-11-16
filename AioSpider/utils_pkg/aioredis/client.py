@@ -28,15 +28,15 @@ from typing import (
     cast,
 )
 
-from aioredis.compat import Protocol, TypedDict
-from aioredis.connection import (
+from AioSpider.utils_pkg.aioredis.compat import Protocol, TypedDict
+from AioSpider.utils_pkg.aioredis.connection import (
     Connection,
     ConnectionPool,
     EncodableT,
     SSLConnection,
     UnixDomainSocketConnection,
 )
-from aioredis.exceptions import (
+from AioSpider.utils_pkg.aioredis.exceptions import (
     ConnectionError,
     DataError,
     ExecAbortError,
@@ -48,8 +48,8 @@ from aioredis.exceptions import (
     TimeoutError,
     WatchError,
 )
-from aioredis.lock import Lock
-from aioredis.utils import safe_str, str_if_bytes
+from AioSpider.utils_pkg.aioredis.lock import Lock
+from AioSpider.utils_pkg.aioredis.utils import safe_str, str_if_bytes
 
 AbsExpiryT = Union[int, datetime.datetime]
 ExpiryT = Union[int, datetime.timedelta]

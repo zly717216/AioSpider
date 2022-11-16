@@ -10,9 +10,9 @@ from __future__ import absolute_import
 import os
 import sys
 
-from bitarray import bitarray, bits2bytes, get_default_endian
+from AioSpider.utils_pkg.bitarray import bitarray, bits2bytes, get_default_endian
 
-from bitarray._util import (
+from AioSpider.utils_pkg.bitarray._util import (
     count_n, rindex, parity, count_and, count_or, count_xor, subset,
     serialize, ba2hex, _hex2ba, ba2base, _base2ba, vl_encode, _vl_decode,
     canonical_decode, _set_bato,

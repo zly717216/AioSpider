@@ -9,17 +9,17 @@ import stat
 import sys
 import tempfile
 import six
-import execjs._json2 as _json2
-import execjs._runner_sources as _runner_sources
+from AioSpider.utils_pkg.execjs import _json2 as _json2
+from AioSpider.utils_pkg.execjs import _runner_sources as _runner_sources
 
-from execjs._exceptions import (
+from AioSpider.utils_pkg.execjs._exceptions import (
     ProcessExitedWithNonZeroStatus,
     ProgramError
 )
 
-from execjs._abstract_runtime import AbstractRuntime
-from execjs._abstract_runtime_context import AbstractRuntimeContext
-from execjs._misc import encode_unicode_codepoints
+from AioSpider.utils_pkg.execjs._abstract_runtime import AbstractRuntime
+from AioSpider.utils_pkg.execjs._abstract_runtime_context import AbstractRuntimeContext
+from AioSpider.utils_pkg.execjs._misc import encode_unicode_codepoints
 
 
 class ExternalRuntime(AbstractRuntime):

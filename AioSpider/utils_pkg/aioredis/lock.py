@@ -4,10 +4,10 @@ import uuid
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Awaitable, NoReturn, Optional, Union
 
-from aioredis.exceptions import LockError, LockNotOwnedError
+from AioSpider.utils_pkg.aioredis.exceptions import LockError, LockNotOwnedError
 
 if TYPE_CHECKING:
-    from aioredis import Redis
+    from AioSpider.utils_pkg.aioredis import Redis
 
 
 class Lock:

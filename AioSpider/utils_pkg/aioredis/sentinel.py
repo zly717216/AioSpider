@@ -2,15 +2,15 @@ import random
 import weakref
 from typing import AsyncIterator, Iterable, Mapping, Sequence, Tuple, Type
 
-from aioredis.client import Redis
-from aioredis.connection import Connection, ConnectionPool, EncodableT, SSLConnection
-from aioredis.exceptions import (
+from AioSpider.utils_pkg.aioredis.client import Redis
+from AioSpider.utils_pkg.aioredis.connection import Connection, ConnectionPool, EncodableT, SSLConnection
+from AioSpider.utils_pkg.aioredis.exceptions import (
     ConnectionError,
     ReadOnlyError,
     ResponseError,
     TimeoutError,
 )
-from aioredis.utils import str_if_bytes
+from AioSpider.utils_pkg.aioredis.utils import str_if_bytes
 
 
 class MasterNotFoundError(ConnectionError):
@@ -145,7 +145,7 @@ class Sentinel:
     """
     Redis Sentinel cluster client
 
-    >>> from aioredis.sentinel import Sentinel
+    >>> from AioSpider.utils_pkg.aioredis.sentinel import Sentinel
     >>> sentinel = Sentinel([('localhost', 26379)], socket_timeout=0.1)
     >>> master = sentinel.master_for('mymaster', socket_timeout=0.1)
     >>> await master.set('foo', 'bar')

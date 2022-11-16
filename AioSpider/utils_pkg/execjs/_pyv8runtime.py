@@ -1,9 +1,9 @@
 import json
 
-import execjs._exceptions as exceptions
-from execjs._abstract_runtime import AbstractRuntime
-from execjs._abstract_runtime_context import AbstractRuntimeContext
-from execjs._misc import encode_unicode_codepoints
+import AioSpider.utils_pkg.execjs._exceptions as exceptions
+from AioSpider.utils_pkg.execjs._abstract_runtime import AbstractRuntime
+from AioSpider.utils_pkg.execjs._abstract_runtime_context import AbstractRuntimeContext
+from AioSpider.utils_pkg.execjs._misc import encode_unicode_codepoints
 
 try:
     import PyV8

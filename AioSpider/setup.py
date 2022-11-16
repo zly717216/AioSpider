@@ -21,15 +21,14 @@ setup(
     author_email='zly717216@qq.com',
     install_requires=requires,
     classifiers=[
-          'Programming Language :: Python :: 3.7',
-          'Programming Language :: Python :: 3.8',
-          'Programming Language :: Python :: 3.9',
-          'Programming Language :: Python :: 3.10',
-          'Topic :: strategy'
-      ],
-    keywords='robot',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+    ],
+    keywords='spider',
     packages=find_packages('AioSpider'),     # 必填
-    package_dir={'': 'AioSpider'},           # 必填
+    package_dir={'AioSpider': ''},           # 必填
     include_package_data=True,
 )
 

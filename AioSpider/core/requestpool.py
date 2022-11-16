@@ -8,7 +8,7 @@ from queue import Queue
 from pathlib import Path
 
 import pickle
-import aioredis
+from AioSpider.utils_pkg import aioredis
 from redis import ConnectionPool, Redis
 
 from AioSpider import tools, AioObject, GlobalConstant

@@ -22,16 +22,16 @@ A short example:
 '''
 from __future__ import unicode_literals, division, with_statement
 
-from execjs._exceptions import (
+from AioSpider.utils_pkg.execjs._exceptions import (
     Error,
     RuntimeError,
     ProgramError,
     RuntimeUnavailableError,
 )
 
-import execjs._runtimes
-from execjs._external_runtime import ExternalRuntime
-from execjs._abstract_runtime import AbstractRuntime
+from AioSpider.utils_pkg.execjs import _runtimes
+from AioSpider.utils_pkg.execjs._external_runtime import ExternalRuntime
+from AioSpider.utils_pkg.execjs._abstract_runtime import AbstractRuntime
 
 
 __all__ = """
@@ -41,10 +41,10 @@ __all__ = """
 """.split()
 
 
-register = execjs._runtimes.register
-get = execjs._runtimes.get
-runtimes = execjs._runtimes.runtimes
-get_from_environment = execjs._runtimes.get_from_environment
+register = _runtimes.register
+get = _runtimes.get
+runtimes = _runtimes.runtimes
+get_from_environment = _runtimes.get_from_environment
 
 
 def eval(source, cwd=None):

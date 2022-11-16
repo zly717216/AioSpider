@@ -3,7 +3,7 @@
 from collections.abc import Iterable, Sequence
 from typing import Any, AnyStr, BinaryIO, Optional, Union
 
-from bitarray import bitarray, BytesLike, CodeDict
+from AioSpider.utils_pkg.bitarray import bitarray, BytesLike, CodeDict
 
 
 FreqMap = dict[Any, Union[int, float]]

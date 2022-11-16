@@ -9,7 +9,7 @@ import time
 
 import aiounittest
 
-import aiosqlite
+from AioSpider.utils_pkg import aiosqlite
 from .smoke import setup_logger
 
 TEST_DB = ":memory:"

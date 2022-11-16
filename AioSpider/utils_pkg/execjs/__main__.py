@@ -5,7 +5,7 @@ import sys
 import io
 from argparse import ArgumentParser, Action, SUPPRESS
 
-import execjs
+from AioSpider.utils_pkg import execjs
 
 
 class PrintRuntimes(Action):

@@ -15,11 +15,11 @@ from string import hexdigits
 from random import choice, randint, random
 from collections import Counter
 
-from bitarray import (bitarray, frozenbitarray, bits2bytes, decodetree,
+from AioSpider.utils_pkg.bitarray import (bitarray, frozenbitarray, bits2bytes, decodetree,
                       get_default_endian, _set_default_endian)
-from bitarray.test_bitarray import Util, skipIf
+from AioSpider.utils_pkg.bitarray.test_bitarray import Util, skipIf
 
-from bitarray.util import (
+from AioSpider.utils_pkg.bitarray.util import (
     zeros, urandom, pprint, make_endian, rindex, strip, count_n,
     parity, count_and, count_or, count_xor, subset,
     serialize, deserialize, ba2hex, hex2ba, ba2base, base2ba,

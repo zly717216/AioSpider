@@ -1,4 +1,4 @@
-import execjs
+from AioSpider.utils_pkg import execjs
 from abc import ABCMeta, abstractmethod
 import six
 

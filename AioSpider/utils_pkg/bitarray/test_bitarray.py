@@ -34,7 +34,7 @@ else:
     range = xrange  # type: ignore
 
 
-from bitarray import (bitarray, frozenbitarray, bits2bytes, decodetree,
+from AioSpider.utils_pkg.bitarray import (bitarray, frozenbitarray, bits2bytes, decodetree,
                       get_default_endian, _set_default_endian,
                       _sysinfo, __version__)
 

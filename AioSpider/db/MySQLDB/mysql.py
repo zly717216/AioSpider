@@ -1,6 +1,6 @@
 import time
 from typing import Optional
-import cchardet
+from AioSpider.utils_pkg import cchardet
 
 import pymysql
 

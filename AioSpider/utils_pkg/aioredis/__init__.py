@@ -1,12 +1,12 @@
-from aioredis.client import Redis, StrictRedis
-from aioredis.connection import (
+from AioSpider.utils_pkg.aioredis.client import Redis, StrictRedis
+from AioSpider.utils_pkg.aioredis.connection import (
     BlockingConnectionPool,
     Connection,
     ConnectionPool,
     SSLConnection,
     UnixDomainSocketConnection,
 )
-from aioredis.exceptions import (
+from AioSpider.utils_pkg.aioredis.exceptions import (
     AuthenticationError,
     AuthenticationWrongNumberOfArgsError,
     BusyLoadingError,
@@ -21,7 +21,7 @@ from aioredis.exceptions import (
     TimeoutError,
     WatchError,
 )
-from aioredis.utils import from_url
+from AioSpider.utils_pkg.aioredis.utils import from_url
 
 
 def int_or_str(value):

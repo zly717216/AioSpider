@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 import six
-import execjs._exceptions as exceptions
+from AioSpider.utils_pkg.execjs import _exceptions as exceptions
 
 
 @six.add_metaclass(ABCMeta)

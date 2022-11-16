@@ -1,10 +1,10 @@
 import os.path
 from collections import OrderedDict
 
-import execjs.runtime_names as runtime_names
-import execjs._external_runtime as external_runtime
-import execjs._pyv8runtime as pyv8runtime
-import execjs._exceptions as exceptions
+from AioSpider.utils_pkg.execjs import runtime_names as runtime_names
+from AioSpider.utils_pkg.execjs import _external_runtime as external_runtime
+from AioSpider.utils_pkg.execjs import _pyv8runtime as pyv8runtime
+from AioSpider.utils_pkg.execjs import _exceptions as exceptions
 
 
 def register(name, runtime):

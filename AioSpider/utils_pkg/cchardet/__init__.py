@@ -1,4 +1,4 @@
-from cchardet import _cchardet
+from AioSpider.utils_pkg.cchardet import _cchardet
 
 
 def detect(msg: bytes) -> dict:
