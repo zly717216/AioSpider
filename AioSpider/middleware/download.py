@@ -4,7 +4,11 @@ from asyncio import exceptions
 from urllib.parse import urlparse
 
 from AioSpider import GlobalConstant
-from AioSpider.utils_pkg import cchardet
+try:
+    from cchardet import detect
+except:
+    from chardet import detect
+
 
 user_agent = {
     "browsers": {
@@ -1446,7 +1450,7 @@ class LastMiddleware(Middleware):
             if hasattr(response.request, 'encoding'):
                 self.encoding_map[host] = response.request.encoding
             else:
-                encoding = cchardet.detect(content)["encoding"]
+                encoding = detect(content)["encoding"]
                 encoding = encoding if encoding else response.request.encoding
                 encoding = "GB18030" if encoding.upper() in ("GBK", "GB2312") else encoding
                 self.encoding_map[host] = encoding

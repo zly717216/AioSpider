@@ -1,5 +1,6 @@
 from AioSpider.http import Request
 from AioSpider.core import Engine
+from AioSpider import GlobalConstant
 
 
 class Spider:
@@ -16,6 +17,13 @@ class Spider:
         # 'REQUEST_PROXY': None,
     }
     logger = None
+    _connector = None
+
+    @property
+    def connector(self):
+        if self._connector is None:
+            self._connector = GlobalConstant.database
+        return self._connector
 
     def spider_open(self):
         self.logger.info(f'------------------- 爬虫：{self.name} 已启动 -------------------')

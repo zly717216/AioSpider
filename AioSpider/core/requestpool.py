@@ -73,7 +73,6 @@ class RequestBaseDB:
 
         sts = GlobalConstant().settings
         url = request.url
-        params = copy.deepcopy(request.params) or {}
         data = request.data or {}
 
         if isinstance(data, str):
@@ -84,12 +83,10 @@ class RequestBaseDB:
 
         if hasattr(sts, 'IGNORE_STAMP') and hasattr(sts, 'STAMP_NAMES'):
             for i in getattr(sts, 'STAMP_NAMES', []):
-                if params and params.get(i):
-                    params.pop(i)
                 if data and data.get(i):
                     data.pop(i)
 
-        item = f'{url}{params}{data}'.encode()
+        item = f'{url}{data}'.encode()
         req_hash = hashlib.md5(item).hexdigest()
         return f'{status}_{req_hash}'
 

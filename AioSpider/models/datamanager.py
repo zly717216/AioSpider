@@ -14,7 +14,7 @@ class DataManager:
     def __init__(self, capacity: int):
 
         self._logger = GlobalConstant().logger
-        self._db = GlobalConstant().database
+        self._db = GlobalConstant.database
         self._pipelines = GlobalConstant().pipelines
         self._models = None
         self._capacity = capacity
@@ -28,6 +28,7 @@ class DataManager:
 
         if self._models is None:
             models = import_module(Path().cwd().name + '.models')
+            GlobalConstant().models = models
             self._models = [getattr(models, p.model, None) for p in self._pipelines]
             self._models = [i for i in self._models if i]
         return self._models
@@ -110,7 +111,7 @@ class DataLoader:
         self._capacity = capacity
         self._data_contain = dict()
         self._logger = GlobalConstant().logger
-        self._db = GlobalConstant().database
+        self._db = GlobalConstant.database
         self._models = models
 
     async def _load_sql_data(self):
@@ -118,7 +119,7 @@ class DataLoader:
             field = self._get_field(m)
             table = self._handler_name(m.__name__)
 
-            data = await self._db.find_many(sql=f'SELECT {field} FROM {table}')
+            data = await self._db[m.db].find_many(sql=f'SELECT {field} FROM {table}')
             bloom = BloomFilter(capacity=self._capacity)
             bloom.add_many(data, is_hash=True)
             self._data_contain[table] = bloom
@@ -168,7 +169,7 @@ class CreateTable:
     def __init__(self, models: list):
 
         self._logger = GlobalConstant().logger
-        self._db = GlobalConstant().database
+        self._db = GlobalConstant.database
         self._models = models
 
     async def _create_sql_table(self):
@@ -177,8 +178,8 @@ class CreateTable:
             sql = f'CREATE TABLE {table} (\n'
             for f in self._get_field(m):
                 sql += getattr(m, f)._table_sql(cols=f) + ',\n'
-            sql = sql[:-2] + '\n)'
-            await self._db.create_table(sql=sql)
+            sql = f'{sql[:-2]}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT="{m.__doc__}"'
+            await self._db[m.db].create_table(sql=sql)
             self._logger.info(f'{table} 创建表成功')
 
     def _create_mongo_doc(self):
@@ -235,6 +236,13 @@ class Container:
         self.item_count = dict()
         self._data_manager = manager
         self._logger = GlobalConstant().logger
+        self.__db = None
+
+    @property
+    def _db(self):
+        if self.__db is None:
+            self.__db = GlobalConstant.database
+        return self.__db
 
     @property
     def data_manager(self):
@@ -289,12 +297,25 @@ class Container:
 
 class ABCCommit(metaclass=ABCMeta):
 
+    # def __init__(self):
+    #     self._logger = GlobalConstant().logger
+
     @abstractmethod
     async def commit(self, sender: object):
         pass
 
 
 class ABCClose(metaclass=ABCMeta):
+
+    def __init__(self):
+        self._logger = GlobalConstant().logger
+        self.__db = None
+
+    @property
+    def _db(self):
+        if self.__db is None:
+            self.__db = GlobalConstant.database
+        return self.__db
 
     @abstractmethod
     async def close(self):
@@ -312,7 +333,7 @@ class SQLCommit(ABCCommit, Container):
             data = tools.deepcopy(self._contain[table])
             self.add_count(table, len(data))
             self.clear(table)
-            await GlobalConstant().database.insert_many(table=table, items=data)
+            await self._db[sender.db].insert_many(table=table, items=data)
             self._logger.info(f'本次已向{table}表提交{len(data)}条记录，总共已提交{self.get_count(table)}条')
 
 
@@ -332,14 +353,17 @@ class CSVCommit(ABCCommit, Container):
             self.add_count(table, len(data))
             self._logger.info(f'本次已向{table}表提交{len(data)}条记录，总共已提交{self.get_count(table)}条')
             self.clear(table)
-            await GlobalConstant().database.insert_many(table=table, items=data, encoding=self.encoding[table])
+            await self._db[self.db].insert_many(table=table, items=data, encoding=self.encoding[table])
 
 
 class CloseContainer(ABCClose):
 
     async def close(self):
         for k in self._contain:
-            await GlobalConstant().database.insert_many(table=k, items=self._contain[k])
+            item = self._contain[k]
+            if not item:
+                continue
+            await self._db[item[0].db].insert_many(table=k, items=item)
             self.add_count(k, self.sql_size(k))
             self._logger.info(f'本次已向{k}表提交{self.sql_size(k)}条记录，总共已提交{self.get_count(k)}条记录')
             self.clear(k)

@@ -1,4 +1,3 @@
-import time
 from decimal import Decimal
 from datetime import datetime, date
 from typing import Optional, Union
@@ -186,7 +185,7 @@ class CharField(Field):
                 raise TypeError(f'类型错误：choice 选项必须为元组或列表类型，当前类型为：{type(self.choices)}')
 
         if self._value is None and not self.null:
-                self._value = self.default or ''
+            self._value = self.default or ''
 
         if isinstance(self._value, (int, float)):
             self._value = str(self._value)
@@ -217,6 +216,7 @@ class CharField(Field):
 
         if self.default is not None:
             sql += f' DEFAULT "{self.default}"'
+        sql += f' COMMENT "{self.name}"'
 
         return sql
 
@@ -243,7 +243,10 @@ class IntField(Field):
         if isinstance(self._value, float):
             self._value = int(self._value)
 
-        if self._value is None and not self.null:
+        if self._value is None:
+            if not self.null:
+                self._value = self.default or 0
+            else:
                 self._value = self.default or 0
 
         if not isinstance(self._value, (int, type(None))):
@@ -258,6 +261,7 @@ class IntField(Field):
 
         if self.default is not None:
             sql += f' DEFAULT {self.default}'
+        sql += f' COMMENT "{self.name}"'
 
         return sql
 
@@ -297,6 +301,7 @@ class FloatField(Field):
             self._value = float(Decimal(self._value).quantize(Decimal('0.000')))
 
     def _table_sql(self, cols=None):
+
         sql = f'{self.db_column or cols or self.name} FLOAT'
         if self.null:
             sql += f' NULL'
@@ -305,6 +310,7 @@ class FloatField(Field):
 
         if self.default is not None:
             sql += f' DEFAULT {self.default}'
+        sql += f' COMMENT "{self.name}"'
 
         return sql
 
@@ -333,6 +339,7 @@ class BoolField(Field):
         self._value = 1 if self._value else 0
 
     def _table_sql(self, cols=None):
+
         sql = f'{self.db_column or cols or self.name} BOOLEAN '
         if self.null:
             sql += f' NULL'
@@ -341,6 +348,7 @@ class BoolField(Field):
 
         if self.default is not None:
             sql += f' DEFAULT {1 if self.default else 0}'
+        sql += f' COMMENT "{self.name}"'
 
         return sql
 
@@ -385,9 +393,8 @@ class AutoIntField(IntField):
 class StampField(IntField):
 
     def __init__(
-            self, name, blank=True, null=True, validators=None,
-            db_column=None, is_save=True, db_index=False, unique=False,
-            to_second=True, to_millisecond=False, dnt_filter=True
+            self, name, blank=True, null=True, validators=None, db_column=None,
+            is_save=True, db_index=False, unique=False, dnt_filter=True
     ):
         super(StampField, self).__init__(
             name=name, unique=unique, blank=blank, null=null,
@@ -397,135 +404,41 @@ class StampField(IntField):
         self._value = 0
         self._check(f'{name}(IntField)')
 
-        if not to_second and not to_millisecond:
-            to_second = True
-
-        if to_millisecond:
-            to_second = False
-
-        # if to_time and to_date or to_time and to_datetime or to_date and to_datetime:
-        #     to_datetime = True
-        #     to_date = False
-        #     to_time = False
-        #
-        # if not to_time and not to_datetime and not to_date:
-        #     to_datetime = True
-        #     to_date = False
-        #     to_time = False
-        #
-        # if to_time:
-        #     to_date = False
-        #     to_datetime = False
-        #
-        # if to_date:
-        #     to_time = False
-        #     to_datetime = False
-
-        self.to_second = to_second
-        self.to_millisecond = to_millisecond
-        # self.to_time = to_time
-        # self.to_date = to_date
-        # self.to_datetime = to_datetime
-
     def _check_value(self):
 
         if not self._value:
-            self._value = int(time.time())
+            self._value = datetime.now()
 
         if isinstance(self._value, (float, int)):
-            if len(str(int(self._value))) != len(str(int(time.time()))) and \
-                    len(str(int(self._value))) != len(str(int(time.time() * 1000))):
-                raise ValueError(f'{self.name}值错误，字段值与预期值不匹配：{self._value}，值必须为可识别的字符串时间或数字')
+            self._value = tools.stamp_to_time(self._value)
 
         elif isinstance(self._value, str):
-            if self._value.isdigit():
-                self._value = int(self._value)
-            elif len(self._value.split('.')) == 2:
-                self._value = float(self._value)
-            else:
-                try:
-                    self._value = tools.TimeConverter.strtime_to_stamp(self._value)
-                except:
-                    raise ValueError(f'{self.name}值错误，字段值与预期值不匹配：{self._value}，值必须为可识别的字符串时间或数字')
-                
+            try:
+                self._value = tools.stamp_to_time(self._value)
+            except:
+                raise ValueError(f'{self.name}值错误，字段值与预期值不匹配：{self._value}，值必须为可识别的字符串时间或数字')
+
         else:
-            raise TypeError(f'{self.name}值类型错误，value={self._value}, value必须为{type(self._value)}类型')
+            if not isinstance(self._value, datetime):
+                raise TypeError(f'{self.name}值类型错误，value={self._value}, value必须为{type(self._value)}类型')
 
-        if self.to_second:
-            self._to_second()
+    def _table_sql(self, cols=None):
 
-        if self.to_millisecond:
-            self._to_millisecond()
+        sql = f'{self.db_column or cols or self.name} TIMESTAMP '
 
-        # if self.to_date:
-        #     self._to_date()
-        #
-        # if self.to_time:
-        #     self._to_time()
-        #
-        # if self.to_datetime:
-        #     self._to_datetime()
+        if self.null:
+            sql += f' NULL'
+        else:
+            sql += f' NOT NULL'
 
-    def _to_millisecond(self):
-        """13位时间戳(将秒时间戳转为毫秒时间戳)"""
+        if self.default:
+            sql += f' DEFAULT {self.default}'
+        else:
+            sql += f' DEFAULT CURRENT_TIMESTAMP'
 
-        if not self._value:
-            return
+        sql += f' COMMENT "{self.name}"'
 
-        if isinstance(self._value, (int, float)) and (self._value // len(str(int(time.time()))) ** 9) == 1:
-            self._value *= 1000
-            return
-
-        if isinstance(self._value, float) and (self._value // len(str(int(time.time()))) ** 12) == 1:
-            self._value = int(self._value)
-            return
-
-    def _to_second(self):
-        """10位时间戳(将毫秒时间戳转为秒时间戳)"""
-
-        if not self._value:
-            return
-
-        if isinstance(self._value, (float, int)) and (self._value // len(str(int(time.time()))) ** 12) == 1:
-            self._value = int(self._value // 1000)
-            return
-
-        if isinstance(self._value, float) and (self._value // len(str(int(time.time()))) ** 9) == 1:
-            self._value = int(self._value)
-            return
-
-    # def _to_time(self):
-    #     """将时间戳转换为时间"""
-    #
-    #     if not self._value:
-    #         return
-    #
-    #     time_local = time.localtime(self._value)
-    #     if self.to_second:
-    #         self._value = time.strftime("%H:%M:%S", time_local)
-    #     else:
-    #         self._value = time.strftime("%H:%M:%S.%f", time_local)
-    #
-    # def _to_date(self):
-    #     """将时间戳转换为日期"""
-    #
-    #     if not self._value:
-    #         return
-    #
-    #     time_local = time.localtime(self._value)
-    #     self._value = time.strftime("%Y-%m-%d", time_local)
-    #
-    # def _to_datetime(self):
-    #     """将时间戳转换为日期时间"""
-    #
-    #     if not self._value:
-    #         return
-    #
-    #     time_local = time.localtime(self._value)
-    #     if self.to_second:
-    #         self._value = time.strftime("%Y-%m-%d %H:%M:%S", time_local)
-    #     else:
-    #         self._value = time.strftime("%Y-%m-%d %H:%M:%S.%f", time_local)
+        return sql
 
 
 class DateField(Field):
@@ -550,7 +463,7 @@ class DateField(Field):
         if isinstance(self._value, str):
             try:
                 self._value = tools.TimeConverter.strtime_to_time(self._value)
-                if self._value is not  None:
+                if self._value is not None:
                     self._value = self._value.date()
             except:
                 raise ValueError(f'值错误：{self.name} 必须为可识别的时间字符串，当前值为：{self._value}')
@@ -568,7 +481,8 @@ class DateField(Field):
 
     def _table_sql(self, cols=None):
 
-        sql = f'{self.db_column or cols or self.name} DATE NOT NULL'
+        sql = f'{self.db_column or cols or self.name} DATE NOT NULL COMMENT "{self.name}"'
+
         return sql
 
 
@@ -608,7 +522,8 @@ class DateTimeField(Field):
 
     def _table_sql(self, cols=None):
 
-        sql = f'{self.db_column or cols or self.name} DATETIME NOT NULL'
+        sql = f'{self.db_column or cols or self.name} DATETIME NOT NULL COMMENT "{self.name}"'
+
         return sql
 
 
@@ -649,9 +564,12 @@ class TextField(Field):
             raise ValueError(f'{self.name}值错误，value={self._value}, value必须为str类型')
 
     def _table_sql(self, cols=None):
-        sql = f'{self.db_column or cols or self.name} BLOB NULL'
 
-        if self.default is not None:
-            sql += f' DEFAULT "{self.default}"'
+        sql = f'{self.db_column or cols or self.name} TEXT NULL'
+
+        # if self.default is not None:
+        #     sql += f' DEFAULT "{self.default}"'
+
+        sql += f' COMMENT "{self.name}"'
 
         return sql

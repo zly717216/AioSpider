@@ -1,6 +1,5 @@
 import time
 from typing import Optional
-from AioSpider.utils_pkg import cchardet
 
 import pymysql
 
@@ -185,6 +184,6 @@ class MySQLAPI:
 
 
 if __name__ == '__main__':
-    db = MysqlAPI(
+    db = MySQLAPI(
         host='101.42.138.122', database='wenzz', user='root', password='717216'
     )

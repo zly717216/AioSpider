@@ -1,5 +1,3 @@
-import os
-import sys
 from pathlib import Path
 
 from .constants import LogLevel, Color, When, UserAgent, WriteMode
@@ -142,14 +140,18 @@ DATABASE_ENGINE = {
     },
     'MYSQL': {
         'ENABLE': False,
-        'MYSQL_HOST': "127.0.0.1",
-        'MYSQL_PORT': 3306,
-        'MYSQL_DB': "",
-        'MYSQL_USER_NAME': "",
-        'MYSQL_USER_PWD': "",
-        'MYSQL_CHARSET': "utf8",
-        'MYSQL_CONNECT_TIMEOUT': 10,
-        'MYSQL_TIME_ZONE': '+0:00',
+        'CONNECT': {
+            'DEFAULT': {
+                'MYSQL_HOST': "127.0.0.1",
+                'MYSQL_PORT': 3306,
+                'MYSQL_DB': "",
+                'MYSQL_USER_NAME': "",
+                'MYSQL_USER_PWD': "",
+                'MYSQL_CHARSET': "utf8",
+                'MYSQL_CONNECT_TIMEOUT': 10,
+                'MYSQL_TIME_ZONE': '+0:00',
+            }
+        }
     },
     'MONGODB': {
         'ENABLE': False,

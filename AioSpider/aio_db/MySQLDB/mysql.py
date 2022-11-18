@@ -9,8 +9,6 @@ from AioSpider import AioObject, GlobalConstant, tools
 
 class MySQLAPI(ABCDB, AioObject):
 
-    engine = 'mysql'
-
     async def __init__(
             self, *, host: str, db: str, user: Optional[str] = None, password: Optional[str] = None,
             port: int = 3306, max_idle_time: int = 5 * 60 * 60, connect_timeout=5, time_zone: str = "+0:00",
@@ -209,7 +207,7 @@ class MySQLAPI(ABCDB, AioObject):
             async with conn.cursor() as cur:
                 try:
                     await cur.execute(sql, values)
-                except aiosqlite.IntegrityError as e:
+                except aiomysql.IntegrityError as e:
                     if 'unique' in str(e).lower():
                         self._logger.error(f'unique重复值错误：{str(e).split(":")[-1]}有重复值')
                     else:
@@ -219,7 +217,7 @@ class MySQLAPI(ABCDB, AioObject):
                 finally:
                     await conn.commit()
 
-    async def _executemany(self, sql: str, values=None) -> None:
+    async def _execute_many(self, sql: str, values=None) -> None:
         """执行sql语句"""
 
         await self._ensure_connected()
@@ -247,14 +245,15 @@ class MySQLAPI(ABCDB, AioObject):
             async with conn.cursor() as cur:
                 try:
                     await cur.execute(sql, values)
+                    return await cur.fetchall()
                 except Exception as e:
                     self._logger.error(e)
-                finally:
-                    return await cur.fetchall()
+
+        return {}
 
     async def find_one(
-            self, table: Optional[str] = None, field: Union[list, tuple, str, None] = None,
-            offset: Optional[int] = None, desc: bool=False, order: Union[list, tuple, str, None] = None, 
+            self, table: Optional[str] = None, field: Union[list, tuple, str, None] = None, count: Optional[int] = 1,
+            offset: Optional[int] = 1, desc: bool=False, order: Union[list, tuple, str, None] = None,
             where: Optional[dict] = None, sql: Optional[str] = None
     ) -> list:
         """
@@ -262,6 +261,7 @@ class MySQLAPI(ABCDB, AioObject):
             @params:
                 table: 表名
                 field: 查询字段约束
+                count: 数量
                 offset: 偏移量
                 order: 排序约束
                 desc: 是否倒序
@@ -334,7 +334,7 @@ class MySQLAPI(ABCDB, AioObject):
             sql = f'INSERT INTO {table} ({",".join([i for i in keys])}) VALUES (' + '%s,' * len(keys)
             sql = sql[:-1] + ')'
 
-            await self._executemany(sql, values)
+            await self._execute_many(sql, values)
         else:
             await self._execute(sql)
 
@@ -353,7 +353,14 @@ class MySQLAPI(ABCDB, AioObject):
 
         sql = f'UPDATE {table} SET {upsets} WHERE {where_str}'
 
-        self._execute(sql, *values)
+        await self._execute(sql, *values)
+
+    def remove_one(self):
+        pass
+
+    def remove_many(self):
+        pass
+
 
     def close(self):
         """关闭数据库连接"""
@@ -363,3 +370,30 @@ class MySQLAPI(ABCDB, AioObject):
             self._pool.close()
             # 等待释放和关闭所有已获取连接的协同程序。应该在close（）之后调用，以等待实际的池关闭
             asyncio.create_task(self._pool.wait_closed())
+
+
+class MySQLConnector:
+
+    engine = 'mysql'
+
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self._connector = dict()
+
+    def __getitem__(self, name):
+        return getattr(self, name, None)
+
+    def __setitem__(self, name, connect):
+        setattr(self, name, connect)
+        self._connector[name] = connect
+
+    def __str__(self):
+        return str(self._connector)
+
+    def __repr__(self):
+        return str(self._connector)
+
+    def items(self):
+        return [(k, v) for k, v in self._connector.items()]
+

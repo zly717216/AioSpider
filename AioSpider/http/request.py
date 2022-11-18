@@ -1,3 +1,4 @@
+from urllib import parse
 from AioSpider.utils_pkg.w3lib.url import safe_url_string
 
 
@@ -13,6 +14,7 @@ class Request(object):
         self.encoding = encoding
         self.url = self._set_url(url)
         self.method = method.upper()
+        self.url = self._quote_params(params) or {}
         self.params = params or {}
         self.cookies = cookies or {}
         self.callback = callback
@@ -44,13 +46,20 @@ class Request(object):
         # 如果不是字符类型肯定报错
         if not isinstance(url, str):
             raise TypeError(f'请求的网址必须是字符串类型, 您指定的是: {type(url).__name__}，请输入正确的网址。url ---> {url}')
+
         # 如果没有冒号 肯定不是完整的网址
         if ':' not in url:
             raise ValueError(f'网址协议不正确，请输入正确的网址，url ---> {url}')
-        # safe_url_string 返回一个安全的网址
-        self.url = safe_url_string(url, self.encoding)
 
-        return self.url
+        return safe_url_string(url, self.encoding)
+
+    def _quote_params(self, params):
+
+        if params is None:
+            return self.url
+
+        params_str = parse.urlencode(params, encoding=self.encoding)
+        return f'{self.url}&{params_str}' if '?' in self.url else f'{self.url}?{params_str}'
 
     def __str__(self):
         if self.help:

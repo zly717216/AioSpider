@@ -18,6 +18,7 @@ class GlobalConstant:
     _pipelines = None
     _spider_name = None
     _logger = None
+    _models = None
 
     def __new__(cls, *args, **kwargs):
         if not hasattr(cls, '_instance'):
@@ -54,6 +55,10 @@ class GlobalConstant:
     def pipelines(self):
         return self._pipelines
 
+    @property
+    def models(self):
+        return self._models
+
     @spider_name.setter
     def spider_name(self, k):
         self._spider_name = k
@@ -81,6 +86,10 @@ class GlobalConstant:
     @pipelines.setter
     def pipelines(self, k):
         self._pipelines = k
+
+    @models.setter
+    def models(self, k):
+        self._models = k
 
 
 class AioObject:

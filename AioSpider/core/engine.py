@@ -1,13 +1,10 @@
-import os
-import sys
 import time
-import json
 import asyncio
-import warnings
 from pathlib import Path
 from pprint import pformat
 from datetime import datetime
 from importlib import import_module
+from collections.abc import Coroutine
 
 import aiohttp
 
@@ -16,7 +13,9 @@ from AioSpider.downloader import Downloader
 from AioSpider.http import Request, Response
 from AioSpider.core.scheduler import Scheduler
 from AioSpider.db import MongoAPI
-from AioSpider.aio_db import SQLiteAPI, CSVFile, MySQLAPI
+from AioSpider.aio_db import (
+    SQLiteAPI, CSVFile, MySQLAPI, MySQLConnector
+)
 from AioSpider.middleware import FirstMiddleware, LastMiddleware
 from AioSpider.models import DataManager
 from AioSpider import settings, init_logger, GlobalConstant, tools
@@ -34,6 +33,7 @@ class Engine:
         self.scheduler = None
         self.middleware = None
         self.downloader = None
+        self.async_connector = None
         self.datamanager = None
 
         self.loop = asyncio.get_event_loop()                  # 开始事件循环
@@ -154,20 +154,30 @@ class Engine:
 
         elif db_engine['MYSQL']['ENABLE']:
 
-            my_host = db_engine['MYSQL']['MYSQL_HOST']
-            my_port = db_engine['MYSQL']['MYSQL_PORT']
-            my_db = db_engine['MYSQL']['MYSQL_DB']
-            my_user = db_engine['MYSQL']['MYSQL_USER_NAME']
-            my_pwd = db_engine['MYSQL']['MYSQL_USER_PWD']
-            my_charset = db_engine['MYSQL']['MYSQL_CHARSET']
-            my_timeout = db_engine['MYSQL']['MYSQL_CONNECT_TIMEOUT']
-            my_time_zone = db_engine['MYSQL']['MYSQL_TIME_ZONE']
+            mysql_conf = db_engine['MYSQL']['CONNECT']
+            connector = MySQLConnector()
 
-            GlobalConstant.database = await MySQLAPI(
-                host=my_host, port=my_port, db=my_db, user=my_user, password=my_pwd,
-                connect_timeout=my_timeout, charset=my_charset, time_zone=my_time_zone
-            )
+            for name, config in mysql_conf.items():
+
+                host = config['MYSQL_HOST']
+                port = config['MYSQL_PORT']
+                db = config['MYSQL_DB']
+                user = config['MYSQL_USER_NAME']
+                pwd = config['MYSQL_USER_PWD']
+                charset = config['MYSQL_CHARSET']
+                timeout = config['MYSQL_CONNECT_TIMEOUT']
+                time_zone = config['MYSQL_TIME_ZONE']
+
+                api = await MySQLAPI(
+                    host=host, port=port, db=db, user=user, password=pwd,
+                    connect_timeout=timeout, charset=charset, time_zone=time_zone
+                )
+                connector[name] = api
+
+            GlobalConstant.database = connector
             self.logger.info(f"MySql数据库已启动：\n{pformat(db_engine['MYSQL'])}")
+
+            return connector
 
         elif db_engine['MONGODB']['ENABLE']:
 
@@ -199,14 +209,16 @@ class Engine:
     async def _open(self):
 
         GlobalConstant().spider_name = self.spider.name
-        await self._init_database()
+        self.async_connector = await self._init_database()
         self.pipeline = self._init_pipeline()
         self.scheduler = await Scheduler()
         self.middleware = self._init_middleware()
         self.downloader = Downloader(self.middleware, self.settings)
         self.datamanager = await self._init_dataloader()
 
-        self.spider.spider_open()
+        if isinstance(self.spider.spider_open(), Coroutine):
+            await self.spider.spider_open()
+
         for p in self.pipeline:
             p.spider_open()
 
@@ -227,8 +239,9 @@ class Engine:
                         continue
                     await i
 
-        if hasattr(GlobalConstant().database, 'close'):
-            GlobalConstant().database.close()
+        for name, connect in self.async_connector.items():
+            if hasattr(connect, 'close'):
+                self.async_connector[name].close()
 
         self.logger.info(f'爬取结束，总共成功发起{await self.scheduler.request_count()}个请求')
         self.spider.spider_close()
@@ -324,8 +337,8 @@ class Engine:
 
             # 如果取出来的不是请求 忽略
             if isinstance(request, Request):
-                async with semaphore:
-                    asyncio.create_task(self._process_request(request, semaphore))
+                await semaphore.acquire()
+                asyncio.create_task(self._process_request(request, semaphore))
 
     @staticmethod
     async def heart_beat(sleep_time):
@@ -347,6 +360,8 @@ class Engine:
             self.loop.create_task(self._process_request(http_obj, semaphore))
         else:
             pass
+
+        semaphore.release()
 
     async def download(self, request):
         """ 下载请求 """

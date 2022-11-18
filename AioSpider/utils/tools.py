@@ -1,4 +1,3 @@
-import os
 import re as _re
 import json
 import time
@@ -7,8 +6,8 @@ import hashlib
 import webbrowser
 from urllib import parse
 from pathlib import Path
-from typing import Union, Any, Iterable, Callable, NoReturn
-from datetime import datetime
+from typing import Union, Any, Iterable, Callable, NoReturn, Optional
+from datetime import datetime, timedelta, date
 
 import numpy as np
 from pandas import to_datetime, Timestamp
@@ -41,7 +40,7 @@ def str2num(string: str, multi: int = 1, force: bool = False, _type: Callable = 
     if not isinstance(string, str):
         return _type() if force else string
 
-    string = _re.findall('([\d十百千万亿\.,%十百千万亿-]+)', string)
+    string = _re.findall(r'([\d十百千万亿\.,%十百千万亿-]+)', string)
 
     if not string:
         return _type() if force else string
@@ -57,7 +56,7 @@ def str2num(string: str, multi: int = 1, force: bool = False, _type: Callable = 
             has_unit = True
             break
 
-    num = _re.findall('([\d\.]+)', string)
+    num = _re.findall(r'([\d\.]+)', string)
     if not num:
         return _type() if force else string
     num = num[0]
@@ -71,18 +70,18 @@ def str2num(string: str, multi: int = 1, force: bool = False, _type: Callable = 
         return _type() if force else string
 
     if has_unit:
-        unit = _re.findall('([十百千万亿]+)', string)
-        for i in unit:
-            if '十' in string:
-                num = num * 10
-            if '百' in string:
-                num = num * 100
-            if '千' in string:
-                num = num * 1000
-            if '万' in string:
-                num = num * 10000
-            if '亿' in string:
-                num = num * 10000 * 10000
+        unit = _re.findall(r'([十百千万亿]+)', string)
+
+        if '十' in unit:
+            num = num * 10
+        if '百' in unit:
+            num = num * 100
+        if '千' in unit:
+            num = num * 1000
+        if '万' in unit:
+            num = num * 10000
+        if '亿' in unit:
+            num = num * 10000 * 10000
 
     num = num / 100 if has_percent else num
     num = -num if neg else num
@@ -226,7 +225,7 @@ class TimeConverter:
         return dt.value // pow(10, 6) - 8 * 60 * 60 * 1000 if millisecond else dt.value // pow(10, 9) - 8 * 60 * 60
 
     @classmethod
-    def stamp_to_strtime(self, time_stamp: Union[int, float, str], format='%Y-%m-%d %H:%M:%S') -> Union[str, None]:
+    def stamp_to_strtime(self, time_stamp: Union[int, float, str], format='%Y-%m-%d %H:%M:%S') -> Optional[str]:
         """
         时间戳转时间字符串，支持秒级（10位）和毫秒级（13位）时间戳自动判断
         :param time_stamp: 时间戳 ex: 秒级：1658220419、1658220419.111222 毫秒级：1658220419111、1658220419111。222
@@ -260,7 +259,7 @@ class TimeConverter:
         return to_datetime(str_time).to_pydatetime()
 
     @classmethod
-    def stamp_to_time(self, time_stamp: Union[int, float, str]) -> Union[datetime, None]:
+    def stamp_to_time(self, time_stamp: Union[int, float, str]) -> Optional[datetime]:
         """
         时间戳转时间字符串，支持秒级（10位）和毫秒级（13位）时间戳自动判断
         :param time_stamp: 时间戳 ex: 秒级：1658220419、1658220419.111222 毫秒级：1658220419111、1658220419111。222
@@ -289,7 +288,7 @@ def strtime_to_stamp(str_time: str, millisecond: bool = False) -> int:
     return TimeConverter.strtime_to_stamp(str_time, millisecond=millisecond)
 
 
-def stamp_to_strtime(time_stamp: Union[int, float, str], format='%Y-%m-%d %H:%M:%S') -> Union[str, None]:
+def stamp_to_strtime(time_stamp: Union[int, float, str], format='%Y-%m-%d %H:%M:%S') -> Optional[str]:
     """
     时间戳转时间字符串，支持秒级（10位）和毫秒级（13位）时间戳自动判断
     :param time_stamp: 时间戳 ex: 秒级：1658220419、1658220419.111222 毫秒级：1658220419111、1658220419111。222
@@ -308,7 +307,7 @@ def strtime_to_time(str_time: str) -> datetime:
     return TimeConverter.strtime_to_time(str_time)
 
 
-def stamp_to_time(time_stamp: Union[int, float, str]) -> Union[datetime, None]:
+def stamp_to_time(time_stamp: Union[int, float, str]) -> Optional[datetime]:
     """
     时间戳转时间字符串，支持秒级（10位）和毫秒级（13位）时间戳自动判断
     :param time_stamp: 时间戳 ex: 秒级：1658220419、1658220419.111222 毫秒级：1658220419111、1658220419111。222
@@ -432,18 +431,14 @@ def re(text: str, regx: str, default: Any = None) -> list:
     return t if t else default
 
 
-def re_text(text: str, regx: str, on=None, default: Any = None) -> list:
+def re_text(text: str, regx: str, default: Any = None) -> list:
     """
     正则 提取文本数据
     :param text: 原始文本数据
     :param regx: 正则表达式
-    :param on: 连接符
     :param default: 默认值
     :return: default or list
     """
-
-    if on is None:
-        on = ''
 
     if default is None:
         default = ''
@@ -472,3 +467,16 @@ def open_html(url: str) -> NoReturn:
 
 def deepcopy(item: Any) -> Any:
     return copy.deepcopy(item)
+
+
+def before_day(
+        now: Optional[datetime] = None, before: int = 0, is_date=False
+) -> Union[datetime, date]:
+
+    if now is None:
+        now = datetime.now()
+
+    if is_date:
+        return (now - timedelta(days=before)).date()
+
+    return now - timedelta(days=before)

@@ -73,7 +73,7 @@ class HelpCommand(AioSpiderCommand):
     def execute(self):
         print("""
         aioSpider帮助系统语法：aioSpider [action] [-argv] 
-        
+
         aioSpider -h: 查看帮助
         aioSpider create -argv <name> [params]
             -argv:
@@ -182,7 +182,76 @@ class MakeCommand(AioSpiderCommand):
     def make_model(self):
         """sql转换成模型 aioSpider make model -i sqlFilePath -o <outPath>"""
 
+        class Field:
+
+            __name__ = ''
+
+            def __init__(
+                    self, field, name, max_length=None, blank=True, null=True, default=None,
+                    unique=False, dnt_filter=False
+            ):
+                self.field = field
+                self.name = name
+                self.max_length = max_length
+                self.blank = blank
+                self.null = null
+                self.default = default
+                self.unique = unique
+                self.dnt_filter = dnt_filter
+
+            def __str__(self):
+
+                model_str = f'    {name} = models.{self.__name__}(name=\"{comment}\"'
+                self.default = self.default if self.default != "null" else None
+
+                if self.max_length:
+                    model_str += f', max_length={self.max_length}'
+                if not self.blank:
+                    model_str += f', blank={self.null}'
+                if not self.null:
+                    model_str += f', null={self.null}'
+                if self.default is not None:
+                    model_str += f', default={self.default}'
+                if self.unique:
+                    model_str += f", unique={self.unique}, "
+                if self.dnt_filter:
+                    model_str += f"dnt_filter={self.dnt_filter}"
+
+                return model_str + f")\n"
+
+        class CharField(Field):
+            __name__ = 'CharField'
+
+        class AutoIntField:
+
+            def __init__(self, field, name):
+                self.field = field
+                self.name = name
+
+            def __str__(self):
+                return f"    {self.field} = models.AutoIntField(name=\"{self.name}\", auto_field='AUTO_INCREMENT')\n"
+
+        class IntField(Field):
+            __name__ = 'IntField'
+
+        class TextField(Field):
+            __name__ = 'TextField'
+
+        class FloatField(Field):
+            __name__ = 'FloatField'
+
+        class DateTimeField(Field):
+            __name__ = 'DateTimeField'
+
+        class DateField(Field):
+            __name__ = 'DateField'
+
+        class StampField(Field):
+            __name__ = 'StampField'
+
         in_path = out_path = None
+        order = []
+
         for i, o in enumerate(self.options):
             if isinstance(o, AioSpiderOptionsI):
                 in_path = Path(self.names[i].name)
@@ -213,7 +282,16 @@ class MakeCommand(AioSpiderCommand):
         else:
             raise Exception('没有匹配到创建的字段，输入的sql有误')
 
-        model_str = f'from AioSpider import models\n\n\nclass {table}Model(models.Model):\n'
+        if 'comment' in sql.split('\n')[-1].lower():
+            doc = re.findall("COMMENT='(.*?)'", sql.split('\n')[-1])
+            doc = doc[0] if doc else None
+        else:
+            doc = None
+
+        if doc is None:
+            model_str = f'from AioSpider import models\n\n\nclass {table}Model(models.Model):\n\n'
+        else:
+            model_str = f'from AioSpider import models\n\n\nclass {table}Model(models.Model):\n    """{doc}模型"""\n\n'
         for f in field_str.split('\n'):
             x = f.strip().split()
             name = x[0].replace('`', '').replace('\'', '').replace('\"', '')
@@ -225,7 +303,7 @@ class MakeCommand(AioSpiderCommand):
             else:
                 comment = name
 
-            if name in ['PRIMARY', 'UNIQUE', 'KEY', 'primary', 'unique']:
+            if name in ['PRIMARY', 'UNIQUE', 'KEY', 'primary', 'unique', 'id', ')']:
                 continue
 
             if 'not null' in f.lower():
@@ -248,64 +326,52 @@ class MakeCommand(AioSpiderCommand):
 
             if 'int' in f.lower():
                 if 'auto_increment' in f.lower() or 'autoincrement' in f.lower():
-                    model_str += f"    {name} = models.AutoIntField(name=\"{comment}\", auto_field='AUTO_INCREMENT')\n"
+                    model_str += str(AutoIntField(field=name, name=comment))
                 else:
-                    if default is not None:
-                        model_str += f"    {name} = models.IntField(name=\"{comment}\", blank={null}, null={null}," \
-                                     f" default={'%s' % default if default != 'null' else None})\n"
-                    else:
-                        model_str += f"    {name} = models.IntField(name=\"{comment}\", blank={null}, null={null})\n"
+                    model_str += str(IntField(
+                        field=name, name=comment, blank=null, null=null, default=default, dnt_filter=dnt_filter
+                    ))
 
             if 'float' in f.lower() or 'double' in f.lower() or 'decimal' in f.lower():
-                if default is not None:
-                    model_str += f"    {name} = models.FloatField(name=\"{comment}\", blank={null}, null={null}, " \
-                                 f"default={'%s' % default if default != 'null' else None})\n"
-                else:
-                    model_str += f"    {name} = models.IntField(name=\"{comment}\", blank={null}, null={null})\n"
+                model_str += str(FloatField(
+                    field=name, name=comment, blank=null, null=null, default=default, dnt_filter=dnt_filter
+                ))
 
             if 'varchar' in f.lower() or 'char' in f.lower():
                 max_length = re.findall(r'varchar\(([\d]+)\)', f.lower())
                 max_length = max_length[0] if max_length else 255
-
-                if default is not None:
-                    if dnt_filter:
-                        model_str += f"    {name} = models.CharField(\n{' ' * 8}name=\"{comment}\", max_length=" \
-                                     f"{max_length}, blank={null}, null={null}, default=" \
-                                     f"{'%s' % default if default != 'null' else None}, unique={unique}, " \
-                                     f"dnt_filter={dnt_filter}\n{' ' * 4})\n"
-                    else:
-                        model_str += f"    {name} = models.CharField(\n{' ' * 8}name=\"{comment}\", max_length=" \
-                                     f"{max_length}, blank={null}, null={null}, default=" \
-                                     f"{'%s' % default if default != 'null' else None}, unique={unique}\n{' ' * 4})\n"
-                else:
-                    if dnt_filter:
-                        model_str += f"    {name} = models.CharField(\n{' ' * 8}name=\"{comment}\", max_length=" \
-                                     f"{max_length}, blank={null}, null={null}, unique={unique}, dnt_filter=" \
-                                     f"{dnt_filter}\n{' ' * 4})\n"
-                    else:
-                        model_str += f"    {name} = models.CharField(\n{' ' * 8}name=\"{comment}\", max_length=" \
-                                     f"{max_length}, blank={null}, null={null}, unique={unique}\n{' ' * 4})\n"
+                model_str += str(CharField(
+                    field=name, name=comment, max_length=max_length, blank=null, null=null, default=default,
+                    unique=unique, dnt_filter=dnt_filter
+                ))
 
             if 'text' in f.lower():
-                if default is not None:
-                    model_str += f"    {name} = models.TextField(name=\"{comment}\", blank={null}, " \
-                                 f"null={null}, default={'%s' % default if default != 'null' else None}, unique={unique}, " \
-                                 f"dnt_filter={dnt_filter})\n"
-                else:
-                    model_str += f"    {name} = models.TextField(name=\"{comment}\", blank={null}," \
-                                 f" null={null}, unique={unique}, dnt_filter={dnt_filter})\n"
+                model_str += str(TextField(
+                    field=name, name=comment, blank=null, null=null, default=default, unique=unique,
+                    dnt_filter=dnt_filter
+                ))
 
-            if 'datetime' in f.lower():
-                if default is not None:
-                    model_str += f"    {name} = models.DateTimeField(name=\"{comment}\")\n"
-                else:
-                    model_str += f"    {name} = models.DateTimeField(name=\"{comment}\")\n"
+            if ' datetime ' in f.lower():
+                model_str += str(DateTimeField(
+                    field=name, name=comment, blank=null, null=null, default=default,
+                    unique=unique, dnt_filter=dnt_filter
+                ))
 
-            if 'date' in f.lower():
-                if default is not None:
-                    model_str += f"    {name} = models.DateField(name=\"{comment}\")\n"
-                else:
-                    model_str += f"    {name} = models.DateField(name=\"{comment}\")\n"
+            if ' date ' in f.lower():
+                model_str += str(DateField(
+                    field=name, name=comment, blank=null, null=null, default=default,
+                    unique=unique, dnt_filter=dnt_filter
+                ))
+
+            if ' timestamp ' in f.lower():
+                model_str += str(StampField(
+                    field=name, name=comment, blank=null, null=null, default=default,
+                    unique=unique, dnt_filter=dnt_filter
+                ))
+
+            order.append(name)
+
+        model_str += f'\n    order = {str(order)}\n'
 
         out_path = out_path if out_path is not None else Path(f'{table}.py')
         out_path.write_text(model_str, encoding='utf-8')
@@ -350,10 +416,10 @@ class MakeCommand(AioSpiderCommand):
         else:
             body = None
 
-        tmp = 'from AioSpider import tools\nfrom AioSpider.http import Request, FormRequest\nfrom AioSpider.spider import' \
-              f' Spider\n\n\nclass DemoSpider(Spider):\n\n    name = "demoSpider"\n    start_urls = [\n{" " * 8}"{url}"\n' \
-              f'{" " * 4}]\n\n    def start_request(self):\n{" " * 8}for url in self.start_urls:\n{" " * 12}yield ' \
-              f'{"FormRequest" if body else "Request"}(\n{" " * 16}url=url, \n{" " * 16}callback=self.parse'
+        tmp = 'from AioSpider import tools\nfrom AioSpider.http import Request, FormRequest\nfrom AioSpider.spider im' \
+              f'port Spider\n\n\nclass DemoSpider(Spider):\n\n    name = "demoSpider"\n    start_urls = [\n{" " * 8}"' \
+              f'{url}"\n{" " * 4}]\n\n    def start_request(self):\n{" " * 8}for url in self.start_urls:\n{" " * 12}y' \
+              f'ield {"FormRequest" if body else "Request"}(\n{" " * 16}url=url, \n{" " * 16}callback=self.parse'
 
         if headers:
             tmp += f",\n{' ' * 16}headers={headers}"
@@ -417,10 +483,3 @@ class Client:
                 cmd.add_name(AioSpiderCommandName(i))
 
         cmd.execute()
-
-
-# argv = sys.argv
-# argv = ['aioSpider', 'make', 'model', '-i', r'C:\apps\PyCharm\project\zly\companyspider\utils\table.txt']
-argv = ['aioSpider', 'make', 'spider', '-i', r'C:\apps\PyCharm\project\zly\companyspider\utils\curl.txt']
-Client(argv)
-

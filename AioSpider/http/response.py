@@ -5,6 +5,7 @@ from pprint import pformat
 from lxml import etree
 from AioSpider.parse import ReParse, XpathParse
 from AioSpider.utils_pkg import execjs
+from AioSpider import tools
 
 from .request import Request
 
@@ -71,7 +72,7 @@ class Response(object):
         return ReParse(arr)
 
     def __str__(self):
-        s = f'Response <{self.status} {self.request.method} {self.url}>'
+        s = f'Response <{self.status} {self.request.method} {tools.extract_url(self.url)}>'
 
         if self.request.help:
             s = f'Response <{self.request.help} {self.status} {self.request.method} {self.url}>'

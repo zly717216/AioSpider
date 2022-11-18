@@ -1,8 +1,3 @@
-import random
-import time
-
-import aiohttp
-
 from AioSpider import GlobalConstant
 from AioSpider.http import Request, Response
 
@@ -24,7 +19,6 @@ class DownloadHandler:
         kwargs = {
             'headers': request.headers,
             'timeout': request.timeout or getattr(self.settings, "REQUEST_TIMEOUT", 10),
-            'params': request.params,
             'cookies': request.cookies,
             'proxy': request.proxy
         }

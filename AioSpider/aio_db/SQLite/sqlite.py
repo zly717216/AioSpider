@@ -1,8 +1,8 @@
 import asyncio
 from typing import Optional, Iterable, Union
 
+import aiosqlite
 from AioSpider.aio_db.abc_db import ABCDB
-from AioSpider.utils_pkg import aiosqlite
 from AioSpider import AioObject, GlobalConstant, tools
 
 

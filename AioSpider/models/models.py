@@ -3,11 +3,18 @@ from AioSpider import tools, GlobalConstant
 from .field import Field, AutoIntField, BoolField, DateTimeField
 
 
+class FieldItem(dict):
+
+    db = 'DEFAULT'
+    table = None
+
+
 class Model:
 
     encoding = None
     order = None
     commit_size = None
+    db = 'DEFAULT'
 
     def __init__(self, item=None):
         if item is not None:
@@ -25,7 +32,7 @@ class Model:
         o._check_value()
 
     @property
-    def __name__(self):
+    def __name__(self) -> str:
 
         name_type = getattr(GlobalConstant().settings, 'MODEL_NAME_TYPE', None)
         if name_type == 'lower':
@@ -37,7 +44,7 @@ class Model:
         else:
             name = self.__class__.__name__.replace('model', '').replace('Model', '')
             name = tools.re(regx='[A-Z][^A-Z]*', text=name)
-            name = [i.lower() for i in  name]
+            name = [i.lower() for i in name]
             return '_'.join(name)
 
     def _order(self):
@@ -65,23 +72,25 @@ class Model:
 
     def _make_item(self):
 
-        value_dic = {}
+        item = FieldItem()
+        item.db = self.db
+        item.table = self.__name__
 
         for f in self._get_field():
             field_obj = getattr(self, f, None)
             if isinstance(field_obj, Field) and field_obj.is_save:
-                value_dic[f] = getattr(self, f, None)._value
+                item[f] = getattr(getattr(self, f, None), '_value', None)
             else:
-                value_dic[f] = None
+                item[f] = None
 
-        if 'id' in value_dic:
-            value_dic.pop('id')
+        if 'id' in item:
+            item.pop('id')
 
-        return value_dic
+        return item
 
     async def save(self):
 
-        if GlobalConstant().database is None:
+        if GlobalConstant.database is None:
             return None
 
         await GlobalConstant().datamanager.commit(self)
@@ -94,13 +103,25 @@ class ABCModel(Model):
     update_time = DateTimeField(name='更新时间')
 
 
-class SQLiteModel(ABCModel):
+class SQLiteModel(Model):
     id = AutoIntField(name='id', db_index=True)
 
 
-class MySQLModel(ABCModel):
+class SQLiteModelICU(ABCModel):
+    id = AutoIntField(name='id', db_index=True)
+
+
+class MySQLModel(Model):
     id = AutoIntField(name='id', db_index=True, auto_field='AUTO_INCREMENT')
 
 
-class CSVModel(ABCModel):
+class MySQLModelICU(ABCModel):
+    id = AutoIntField(name='id', db_index=True, auto_field='AUTO_INCREMENT')
+
+
+class CSVModel(Model):
+    pass
+
+
+class CSVModelICU(ABCModel):
     pass

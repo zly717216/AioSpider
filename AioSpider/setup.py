@@ -6,7 +6,8 @@ from setuptools import find_packages
 
 
 requires = [
-    'aiohttp==3.8.3', 'pymongo==4.3.2', 'pymysql==1.0.2', 'redis==4.3.4', 'pandas==1.5.1', 'lxml==4.8.0'
+    'aiohttp==3.8.3', 'pymongo==4.3.2', 'pymysql==1.0.2', 'redis==4.3.4', 'pandas==1.5.1', 'lxml==4.8.0',
+    'bitarray', 'chardet', 'cchardet', 'aiosqlite'
 ]
 
 if sys.argv and sys.argv[1] == 'install':

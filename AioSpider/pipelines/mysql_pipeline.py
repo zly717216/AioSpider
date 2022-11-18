@@ -1,6 +1,5 @@
-import os
-import asyncio
-from importlib import import_module
+from AioSpider.models import models
+from AioSpider import GlobalConstant
 
 from .pipeline import Pipeline
 
@@ -12,7 +11,7 @@ class MySQLPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super(MySQLPipeline, self).__init__(*args, **kwargs)
-        self._models = import_module(os.getcwd().split('\\')[-1] + '.models')
+        self._models = None
 
     def spider_open(self):
         pass
@@ -21,6 +20,9 @@ class MySQLPipeline(Pipeline):
         pass
 
     async def process_item(self, item):
+
+        if self._models is None:
+            self._models = GlobalConstant().models
 
         if self.model and not hasattr(self._models, self.model):
             return item
@@ -32,7 +34,7 @@ class MySQLPipeline(Pipeline):
 
             await model.save()
 
-        if isinstance(item, getattr(self._models, self.model)):
+        if isinstance(item, models.Model) and self.model == item.__class__.__name__:
             await item.save()
 
         return item
