@@ -1,0 +1,2 @@
+Firefox/xul.dll filter=lfs diff=lfs merge=lfs -text
+Chromium/chrome.dll filter=lfs diff=lfs merge=lfs -text
