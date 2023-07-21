@@ -1,0 +1,13 @@
+include README.md
+include LICENSE
+include MANIFEST.in
+
+include AioSpider/__version__
+include AioSpider/middleware/user-agent.json
+
+recursive-include AioSpider/template *
+recursive-include AioSpider/tools/Redis-x64 *
+recursive-include AioSpider/tools/Chromium *
+recursive-include AioSpider/tools/Firefox *
+
+global-exclude __pycache__ *.py[cod]

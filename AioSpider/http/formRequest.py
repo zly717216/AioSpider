@@ -1,23 +1,14 @@
 import json
+from typing import Union
 
-from AioSpider.utils_pkg.w3lib.url import safe_url_string
-from .request import Request
+from AioSpider.http.base import BaseRequest
 
 
-class FormRequest(Request):
-    """ 实现请求方法 """
+class FormRequest(BaseRequest):
 
-    def __init__(
-            self, url, callback=None, params=None, headers=None, encoding='utf-8',
-            data=None, body=None, cookies=None, timeout=0, proxy=None, priority=1,
-            dnt_filter=False, *args, **kwargs
-        ):
+    def __init__(self, url: str, body: Union[dict, str] = None, data: Union[dict, str] = None, **kwargs):
 
-        if body:
+        if isinstance(body, dict):
             data = json.dumps(body) if isinstance(body, dict) else body
 
-        super(FormRequest, self).__init__(
-            url=url, method='POST', callback=callback, params=params, headers=headers,
-            encoding=encoding, data=data, cookies=cookies, timeout=timeout, proxy=proxy,
-            priority=priority, dnt_filter=dnt_filter, *args, **kwargs
-        )
+        super(FormRequest, self).__init__(url=url, method='POST', data=data,  **kwargs)

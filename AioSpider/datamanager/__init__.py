@@ -1,0 +1,1 @@
+from AioSpider.datamanager.data_manager import DataManager

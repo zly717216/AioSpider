@@ -1,24 +1,82 @@
+__all__ = [
+    'tools', 'logger', 'pretty_table', 'GlobalConstant'
+]
+
 import sys
 from pathlib import Path
+from datetime import datetime
+from typing import List, Union
 
-from AioSpider.utils import tools
-from AioSpider.log import logger as lgr
+from loguru import logger
+from AioSpider.tools import tools
 from AioSpider import settings as sts
+from AioSpider.notice import Robot
+from AioSpider.utils_pkg.prettytable import PrettyTable
 
 
-sys.path.append(str(Path().cwd().parent.parent))
+def _get_work_path(path: Path = Path.cwd()):
+    if str(path) == str(path.anchor):
+        return None
+
+    if {'spider', 'settings.py'} <= {i.name for i in path.iterdir()}:
+        return path
+
+    return _get_work_path(path.parent) or None
+
+
+sys.path.append(str(_get_work_path()))
+robot = Robot()
+
+
+class Browser:
+
+    def __init__(self, browser):
+        self.browser = browser
+        self._flag = False
+
+    @property
+    def flag(self):
+        return self._flag
+
+    @flag.setter
+    def flag(self, k):
+        self._flag = k
+
+
+class Connector:
+
+    def __init__(self):
+        self._c = {}
+
+    def __getitem__(self, name):
+        return self._c[name]
+
+    def __setitem__(self, name, conn):
+        self._c[name] = conn
+
+    def __contains__(self, item):
+        return item in self._c
+
+    def __iter__(self):
+        return iter(self._c.keys())
+
+    def __str__(self):
+        return str(self._c)
+
+    __repr__ = __str__
 
 
 class GlobalConstant:
 
+    start_time = None
+    data_count = None
+
     _settings = None
-    _datamanager = None
-    _database = None
-    _session = None
-    _pipelines = None
-    _spider_name = None
-    _logger = None
-    _models = None
+    _download_middleware = None
+    _spider_middleware = None
+    _connector = None
+    _spider = None
+    _browser = None
 
     def __new__(cls, *args, **kwargs):
         if not hasattr(cls, '_instance'):
@@ -26,128 +84,106 @@ class GlobalConstant:
         return cls._instance
 
     @property
-    def spider_name(self):
-        return self._spider_name
+    def spider(self):
+        return self._spider
 
     @property
-    def logger(self):
-        if self._logger is None:
-            self._logger = init_logger()
-        return self._logger
+    def settings(self) -> sts:
+        return self._settings or sts
 
     @property
-    def settings(self):
-        return self._settings
+    def download_middleware(self):
+        return self._download_middleware
 
     @property
-    def datamanager(self):
-        return self._datamanager
+    def spider_middleware(self):
+        return self._spider_middleware
 
     @property
-    def database(self):
-        return self._database
-    
-    @property
-    def session(self):
-        return self._session
+    def connector(self):
+        if self._connector is None:
+            self._connector = Connector()
+        return self._connector
 
     @property
-    def pipelines(self):
-        return self._pipelines
+    def browser(self):
+        return self._browser
 
-    @property
-    def models(self):
-        return self._models
-
-    @spider_name.setter
-    def spider_name(self, k):
-        self._spider_name = k
-
-    @logger.setter
-    def logger(self, k):
-        self._logger = k
+    @spider.setter
+    def spider(self, k):
+        self._spider = k
 
     @settings.setter
     def settings(self, k):
         self._settings = k
 
-    @datamanager.setter
-    def datamanager(self, k):
-        self._datamanager = k
+    @download_middleware.setter
+    def download_middleware(self, k):
+        self._download_middleware = k
 
-    @database.setter
-    def database(self, k):
-        self._database = k
+    @spider_middleware.setter
+    def spider_middleware(self, k):
+        self._spider_middleware = k
 
-    @session.setter
-    def session(self, k):
-        self._session = k
+    @connector.setter
+    def connector(self, conn_dict: dict):
+        for k, v in conn_dict.items():
+            self.connector[k] = v
 
-    @pipelines.setter
-    def pipelines(self, k):
-        self._pipelines = k
-
-    @models.setter
-    def models(self, k):
-        self._models = k
+    @browser.setter
+    def browser(self, k):
+        self._browser = Browser(k)
 
 
-class AioObject:
+def pretty_table(item: Union[dict, List[dict]]):
 
-    async def __new__(cls, *args, **kwargs):
-        instance = super().__new__(cls)
-        await instance.__init__(*args, **kwargs)
-        return instance
+    if isinstance(item, dict):
+        item = [item]
+
+    return str(PrettyTable(item=item))
 
 
-def init_logger(settings=sts.LOGGING):
+class TableView:
 
-    log_name = settings.get('LOG_NAME')
-    file_path = settings['LOG_PATH'] / ((log_name or GlobalConstant().spider_name) + '.log')
-    cmd_fmt = settings['LOG_CMD_FORMAT']
-    file_fmt = settings['LOG_FILE_FORMAT']
+    def __init__(self, items, bold=True):
+        self.items = items
+        self.bold = bold
+        self.colors = [
+            'red', 'green', 'yellow', 'magenta', 'cyan',
+            'white', 'orange3', 'purple3', 'turquoise4'
+        ]
 
-    if cmd_fmt and not file_fmt:
-        file_fmt = cmd_fmt
+    def console(self):
+        from rich.console import Console
+        from rich.table import Table
 
-    if not cmd_fmt and file_fmt:
-        cmd_fmt = file_fmt
+        console = Console()
 
-    cmd_level = settings['LOG_CMD_LEVEL']
-    file_level = settings['LOG_FILE_LEVEL']
+        # 创建表格
+        table = Table(header_style="bold blue", border_style='#d2c1ad')
 
-    if cmd_level and not file_level:
-        file_level = cmd_level
+        for index, k in enumerate(self.items[0].keys()):
+            style = 'bold ' + self.colors[index] if self.bold else self.colors[index]
+            table.add_column(k, justify="left", style=style, no_wrap=True)
+            # table.add_column("Age", justify="center", style="magenta")
+            # table.add_column("City", justify="right", style="green")
 
-    if not cmd_level and file_level:
-        cmd_level = file_level
+        for v in self.items:
+            table.add_row(*[str(i) for i in v.values()])
 
-    cmd_date_fmt = settings['LOG_CMD_DATE_FORMAT']
-    file_date_fmt = settings['LOG_FILE_DATE_FORMAT']
+        # 输出表格
+        console.print(table)
+    
 
-    if cmd_date_fmt and not file_date_fmt:
-        file_date_fmt = cmd_date_fmt
-
-    if not cmd_date_fmt and file_date_fmt:
-        cmd_date_fmt = file_date_fmt
-
-    colorful = settings['LOG_COLORFUL']
-    backup_count = settings['LOG_BACKUP_COUNT']
-    limit = settings['LOG_LIMIT_BYTES']
-    cmd_log = settings['LOG_IS_CONSOLE']
-    file_log = settings['LOG_IS_FILE']
-    file_mode = settings['LOG_MODE']
-    encoding = settings['LOG_ENCODING']
-    color_dict = settings['LOG_COLOR_DICT']
-    others_level = settings['OTHERS_LOG_LEVEL']
-    when = settings['OTHERS_WHEN']
-
-    kwargs = {
-        'name': log_name, 'file_path': file_path, 'cmd_level': cmd_level, 'file_level': file_level,
-        'cmd_fmt': cmd_fmt, 'file_fmt': file_fmt, 'cmd_date_fmt': cmd_date_fmt, 'file_date_fmt': file_date_fmt,
-        'colorful': colorful, 'backup_count': backup_count, 'limit': limit, 'cmd_log': cmd_log,
-        'file_log': file_log, 'file_mode': file_mode, 'encoding': encoding, 'cmd_color_dict': color_dict,
-        'others_level': others_level, 'when': when
-    }
-
-    return lgr(**kwargs)
+def welcom_print():
+    words = """
+*------------------------------------------------------------------------------------------------------------------------------------------------*
+|             __        __   _                                      _                  _    _      ____        _     _                           |
+|             \ \      / /__| | ___ ___  _ __ ___   ___          _ | |_ ___           / \  (_) ___/ ___| _ __ (_) __| | ___ _ __                 |
+|              \ \ /\ / / _ \ |/ __/ _ \| '_ ` _ \ / _ \        |_  __/ _ \          / _ \ | |/ _ \___ \| '_ \| |/ _` |/ _ \ '__|                |
+|               \ V  V /  __/ | (_| (_) | | | | | |  __/          | || (_) |        / ___ \| | (_) |__) | |_) | | (_| |  __/ |                   |
+|                \_/\_/ \___|_|\___\___/|_| |_| |_|\___|           \__\___/        /_/   \_\_|\___/____/| .__/|_|\__,_|\___|_|                   |
+|                                                                                                       |_|                                      |
+*------------------------------------------------------------------------------------------------------------------------------------------------*
+    """
+    print(words)

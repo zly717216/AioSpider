@@ -1,1 +1,5 @@
-from AioSpider.parse.parse import ReParse, XpathParse
+__all__ = [
+    'Parse'
+]
+
+from AioSpider.parse.parse import Parse

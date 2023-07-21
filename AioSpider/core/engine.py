@@ -1,250 +1,67 @@
-import time
 import asyncio
-from pathlib import Path
-from pprint import pformat
+import inspect
+import itertools
+import os
+import time
+from collections import deque
 from datetime import datetime
-from importlib import import_module
-from collections.abc import Coroutine
+from pprint import pformat
+from typing import Callable, Union
 
-import aiohttp
-
-from AioSpider.models import Model
-from AioSpider.downloader import Downloader
-from AioSpider.http import Request, Response
-from AioSpider.core.scheduler import Scheduler
-from AioSpider.db import MongoAPI
-from AioSpider.aio_db import (
-    SQLiteAPI, CSVFile, MySQLAPI, MySQLConnector
+from AioSpider import (
+    GlobalConstant, logger, pretty_table, tools, welcom_print
 )
-from AioSpider.middleware import FirstMiddleware, LastMiddleware
-from AioSpider.models import DataManager
-from AioSpider import settings, init_logger, GlobalConstant, tools
+from AioSpider.core.patch import apply
+from AioSpider.datamanager import DataManager
+from AioSpider.downloader import Downloader
+from AioSpider.exceptions import *
+from AioSpider.http import Response, BaseRequest
+from AioSpider.loading import BootLoader
+from AioSpider.middleware import AsyncMiddleware
+from AioSpider.models import Model, TaskModel
+from AioSpider.requestpool import RequestPool
+from AioSpider.spider import BatchSpider, Spider
+
+
+apply()
 
 
 class Engine:
 
-    def __init__(self, spider):
+    def __init__(self):
 
-        self.spider = spider                                  # 爬虫实例
-        self.settings = self._read_settings()                 # 配置文件
-        self.logger = self._init_log()
+        self.spider: Spider = None
+        self.bootloader = BootLoader()
+        self.settings = None
+        self.models = None
+        self.request_pool: RequestPool = None
+        self.download_middleware = None
+        self.spider_middleware = None
+        self.downloader: Downloader = None
+        self.connector = None
+        self.datamanager: DataManager = None
+        self.driver = None
 
-        self.pipeline = None
-        self.scheduler = None
-        self.middleware = None
-        self.downloader = None
-        self.async_connector = None
-        self.datamanager = None
+        # 开始事件循环
+        self.loop = asyncio.get_event_loop()
+        self.req_tasks = None
 
-        self.loop = asyncio.get_event_loop()                  # 开始事件循环
+        self.start_time = time.time()
+        self.start_time1 = datetime.now()
+        self.crawing_time = 0
+        self.data_count = 0
 
-    def _read_settings(self):
+    def add_spider(self, spider: Union[Spider, Callable], *args, **kwargs):
 
-        # 项目settings
-        sts = import_module(
-            (Path().cwd().parent.name or Path().cwd().name) + '.settings'
-        )
+        if issubclass(spider, Spider):
+            self.spider = spider(*args, **kwargs)
+            return
 
-        # 爬虫settings   优先级：爬虫settings > 项目settings > 系统settings
-        for i in dir(sts):
-            if self.spider.settings.get(i):
-                setattr(sts, i, self.spider.settings.get(i))
-            else:
-                continue
+        if isinstance(spider, Spider):
+            self.spider = spider
+            return
 
-        if not getattr(sts, 'AIOSPIDER_PATH'):
-            raise Exception('settings 中未配置工作路径')
-
-        GlobalConstant().settings = sts
-        return sts
-
-    def _init_log(self):
-
-        if getattr(self.settings, 'LOGGING', None):
-            sts = self.settings.LOGGING
-        else:
-            sts = settings.LOGGING
-
-        if not sts.get('LOG_NAME'):
-            sts['LOG_NAME'] = self.spider.name
-
-        if sts.get('LOG_IS_FILE'):
-            if not sts.get('LOG_PATH'):
-                sts['LOG_PATH'] = str(self.settings.AIOSPIDER_PATH / f'log{self.spider.name}.log')
-            tools.mkdir(sts['LOG_PATH'])
-
-        logger = init_logger(sts)
-        self.spider.logger = logger
-        GlobalConstant().logger = logger
-
-        return logger
-
-    def _init_pipeline(self):
-
-        pipelines = getattr(self.settings, 'ITEM_PIPELINES', [])
-        if pipelines:
-            self.logger.info(f'数据管道已启动：\n{pformat(pipelines)}')
-
-        pp = []
-        for p in pipelines:
-            *py, c = p.split('.')
-            x = import_module('.'.join(py))
-            pp.append((eval(f'x.{c}'), pipelines[p]))
-
-        GlobalConstant()._pipelines = [p[0] for p in sorted(pp, key=lambda k: k[1])]
-        return [p[0](self.spider) for p in sorted(pp, key=lambda k: k[1])]
-
-    def _init_middleware(self):
-
-        middleware = getattr(self.settings, 'DOWNLOAD_MIDDLEWARE', {})
-        if middleware:
-            self.logger.info(f'下载中间件已启动：\n{pformat(middleware)}')
-
-        mm = []
-        for p in middleware:
-            *py, c = p.split('.')
-            x = import_module('.'.join(py))
-            mm.append((eval(f'x.{c}'), middleware[p]))
-
-        # 中间件实例调序
-        mm = [m[0](self.spider, self.settings, self.scheduler) for m in sorted(mm, key=lambda k: k[1])]
-        for m in mm:
-
-            if isinstance(m, FirstMiddleware):
-                mm.remove(m)
-                mm.insert(0, m)
-
-            if isinstance(m, LastMiddleware):
-                mm.remove(m)
-                mm.append(m)
-
-        return mm
-
-    async def _init_database(self):
-
-        db_engine = getattr(self.settings, 'DATABASE_ENGINE', None)
-
-        if db_engine is None:
-            return None
-
-        elif db_engine['SQLITE']['ENABLE']:
-
-            sq_path = db_engine['SQLITE']['SQLITE_PATH']
-            if not sq_path.exists():
-                sq_path.mkdir(parents=True, exist_ok=True)
-
-            sq_db = db_engine['SQLITE']['SQLITE_DB']
-            path = sq_path / sq_db
-            sq_timeout = db_engine['SQLITE']['SQLITE_TIMEOUT']
-
-            GlobalConstant.database = await SQLiteAPI(path, sq_timeout)
-            self.logger.info(f"SQLite数据库已启动：\n{pformat(db_engine['SQLITE'])}")
-
-        elif db_engine['CSVFile']['ENABLE']:
-
-            csv_path = db_engine['CSVFile']['CSV_PATH']
-            encoding = db_engine['CSVFile']['ENCODING']
-            write_mode = db_engine['CSVFile']['WRITE_MODE']
-
-            if not csv_path.exists():
-                csv_path.mkdir(parents=True, exist_ok=True)
-
-            GlobalConstant.database = CSVFile(path=csv_path, encoding=encoding, write_mode=write_mode)
-            self.logger.info(f"CSVFile数据库已启动：\n{pformat(db_engine['CSVFile'])}")
-
-        elif db_engine['MYSQL']['ENABLE']:
-
-            mysql_conf = db_engine['MYSQL']['CONNECT']
-            connector = MySQLConnector()
-
-            for name, config in mysql_conf.items():
-
-                host = config['MYSQL_HOST']
-                port = config['MYSQL_PORT']
-                db = config['MYSQL_DB']
-                user = config['MYSQL_USER_NAME']
-                pwd = config['MYSQL_USER_PWD']
-                charset = config['MYSQL_CHARSET']
-                timeout = config['MYSQL_CONNECT_TIMEOUT']
-                time_zone = config['MYSQL_TIME_ZONE']
-
-                api = await MySQLAPI(
-                    host=host, port=port, db=db, user=user, password=pwd,
-                    connect_timeout=timeout, charset=charset, time_zone=time_zone
-                )
-                connector[name] = api
-
-            GlobalConstant.database = connector
-            self.logger.info(f"MySql数据库已启动：\n{pformat(db_engine['MYSQL'])}")
-
-            return connector
-
-        elif db_engine['MONGODB']['ENABLE']:
-
-            mo_host = db_engine['MONGODB']['MONGO_HOST']
-            mo_port = db_engine['MONGODB']['MONGO_HOST']
-            mo_db = db_engine['MONGODB']['MONGO_DB']
-            mo_user = db_engine['MONGODB']['MONGO_USER_NAME']
-            mo_pwd = db_engine['MONGODB']['MONGO_USER_PWD']
-
-            GlobalConstant.database = MongoAPI(
-                host=mo_host, port=mo_port, db=mo_db, username=mo_user, password=mo_pwd
-            )
-            self.logger.info(f"MongoDB数据库已启动：\n{pformat(db_engine['MONGODB'])}")
-
-        else:
-            return None
-
-    async def _init_dataloader(self):
-
-        data_manager = DataManager(
-            capacity=getattr(self.settings, 'CAPACITY', 10000 * 10000)
-        )
-        GlobalConstant().datamanager = data_manager
-        self.logger.info(f'数据管理器已启动，加载到 {len(data_manager.models)} 个模型，{pformat(data_manager.models)}')
-
-        await data_manager.open()
-        return data_manager
-
-    async def _open(self):
-
-        GlobalConstant().spider_name = self.spider.name
-        self.async_connector = await self._init_database()
-        self.pipeline = self._init_pipeline()
-        self.scheduler = await Scheduler()
-        self.middleware = self._init_middleware()
-        self.downloader = Downloader(self.middleware, self.settings)
-        self.datamanager = await self._init_dataloader()
-
-        if isinstance(self.spider.spider_open(), Coroutine):
-            await self.spider.spider_open()
-
-        for p in self.pipeline:
-            p.spider_open()
-
-    async def _close(self):
-
-        for p in self.pipeline:
-            p.spider_close()
-
-        await self.scheduler.close()
-        await self.datamanager.close()
-
-        while True:
-            if len(asyncio.all_tasks(self.loop)) <= 1:
-                break
-            else:
-                for i in asyncio.all_tasks(self.loop):
-                    if i.get_name() == 'Task-1':
-                        continue
-                    await i
-
-        for name, connect in self.async_connector.items():
-            if hasattr(connect, 'close'):
-                self.async_connector[name].close()
-
-        self.logger.info(f'爬取结束，总共成功发起{await self.scheduler.request_count()}个请求')
-        self.spider.spider_close()
+        raise Exception(f'{spider} 不是爬虫类！')
 
     def start(self):
         """启动引擎"""
@@ -253,178 +70,390 @@ class Engine:
             # 将协程注册到事件循环中
             self.loop.run_until_complete(self.execute())
         except KeyboardInterrupt:
-            self.loop.run_until_complete(self.scheduler.close())
-            self.logger.error('手动退出')
+            self.loop.run_until_complete(self.close())
+            logger.error('手动退出')
+        except ValueError as e:
+            logger.exception(e)
+        except SystemConfigError as e:
+            logger.error(e)
+        # except BaseException as e:
+        #     self.loop.run_until_complete(self.request_pool.close())
+        #     logger.error(f'异常退出：原因：{e}')
         except Exception as e:
             raise e
+        finally:
+            self.loop.run_until_complete(self.loop.shutdown_asyncgens())
 
     async def execute(self):
         """ 执行初始化start_urls里面的请求 """
 
-        # 开始采集
-        self.logger.info(f'{">" * 25} {self.spider.name}: 开始采集 {"<" * 25}')
-        # 爬虫开始的时间
-        start_time = datetime.now()
-        await self._open()
+        await self.open()
+        if isinstance(self.spider, BatchSpider):
+            await self._scheduler_batch_spider()
+        else:
+            await self._scheduler_spider()
+        await self.close()
 
-        con_sts = getattr(self.settings, 'CONNECT_POOL', {})
-        connector = aiohttp.TCPConnector(
-            limit=con_sts.get('MAX_CONNECT_COUNT', 100),
-            use_dns_cache=con_sts.get('USE_DNS_CACHE', True),
-            force_close=con_sts.get('FORCE_CLOSE', False),
-            ttl_dns_cache=con_sts.get('TTL_DNS_CACHE', 10),
-            limit_per_host=con_sts.get('LIMIT_PER_HOST', 0),
-            verify_ssl=con_sts.get('VERIFY_SSL', True)
+    async def _init_request_pool(self) -> RequestPool:
+        request_pool = RequestPool(self.spider, self.settings, self.connector)
+        await request_pool.loads_cache()
+        return request_pool
+
+    async def _init_dataloader(self) -> DataManager:
+
+        data_manager = DataManager(self.settings, self.connector, self.models)
+        logger.info(f'数据管理器已启动，加载到 {len(data_manager.models)} 个模型，\n{pformat(data_manager.models)}')
+
+        await data_manager.open()
+        return data_manager
+
+    def _init_downloader(self) -> Downloader:
+        return Downloader(self.settings, self.download_middleware)
+
+    def close_redis(self, port=6379):
+
+        with os.popen(f"netstat -ano | findstr {port}") as r:
+            pids = set([i.strip() for i in tools.re(r.read(), 'LISTENING(.*)')])
+
+        for pid in pids:
+            os.system(f"taskkill /PID {pid} /T /F")
+
+    async def close_connect(self):
+        """关闭数据库"""
+
+        for name, connect in self.connector.items():
+
+            # if name == 'redis':
+            #     # 关闭本地redis终端
+            #     self.close_redis()
+
+            for k, v in connect.items():
+                await v.close()
+                logger.info(f'{name}-{k}数据库连接已关闭')
+
+    async def open(self):
+
+        welcom_print()
+        logger.info(f'{">" * 25} {self.spider.name}: 开始采集 {"<" * 25}')
+
+        GlobalConstant().spider = self.spider
+        self.settings = self.bootloader.reload_settings(self.spider)
+        self.bootloader.reload_logger(self.spider.name, self.settings)
+        self.bootloader.reload_notice(self.spider.name, self.settings)
+        self.connector = await self.bootloader.reload_connection(self.settings)
+        self.models = self.bootloader.reload_models(self.spider, self.settings)
+        self.request_pool = await self._init_request_pool()
+        self.download_middleware, self.spider_middleware = self.bootloader.reload_middleware(
+            self.spider, self.settings, self.request_pool
         )
+        self.driver = self.bootloader.reload_driver(self.settings)
+        self.downloader = self._init_downloader()
+        self.datamanager = await self._init_dataloader()
 
-        async with aiohttp.ClientSession(connector=connector) as s:
-            GlobalConstant().session = s
-            for request in self.spider.start_requests():
-                await self.scheduler.push_request(request)
+    async def close(self):
 
-            await self._next_request()
-        await self._close()
+        for k, v in self.datamanager.containers.items():
+            self.data_count += await v.close()
 
-        while True:
-            if len(asyncio.all_tasks(self.loop)) <= 1:
-                break
-            else:
-                for i in asyncio.all_tasks(self.loop):
-                    if i.get_name() == 'Task-1':
-                        continue
-                    await i
+        completed_count = await self.request_pool.done_size()
+        failure_count = self.request_pool.failure_size()
+        item = [{
+            "完成数量": completed_count, "失败数量": failure_count, "运行时间": self.spider.attrs['running'],
+            '并发速度': self.spider.attrs['avg_speed'], '完成进度': '100%'
+        }]
+        logger.info(f'爬取结束，总请求详情：\n{pretty_table(item)}')
 
-        self.logger.info(f'{">" * 25} 采集结束 {"<" * 25}')
-        self.logger.info(f'{">" * 25} 总共用时: {datetime.now() - start_time} {"<" * 25}')
-        time.sleep(1)
+        if self.driver is not None:
+            self.driver.quit()
+        if self.request_pool is not None:
+            await self.request_pool.close()
+        if self.downloader is not None:
+            await self.downloader.close_session()
 
-    async def _next_request(self):
-        """ 不断的获取下一个请求 """
+        await self.close_connect()
 
-        # 允许任务并发的数量
-        task_limit = getattr(self.settings, 'REQUEST_CONCURRENCY_COUNT', 5)
-        # 求情队列无请求时休眠时间
-        sleep_time = getattr(self.settings, 'NO_REQUEST_SLEEP_TIME', 3)
-        task_sleep = getattr(self.settings, 'REQUEST_CONCURRENCY_SLEEP', 1)
-        per_task_sleep = getattr(self.settings, 'PER_REQUEST_SLEEP', 0)
+        logger.info(f'{">" * 25} {self.spider.name}: 采集结束 {"<" * 25}')
+        logger.info(f'{">" * 25} 总共用时: {datetime.now() - self.start_time1} {"<" * 25}')
 
-        # 设置请求并发量
-        semaphore = asyncio.Semaphore(value=task_limit)
-        # 死循环 不断的循环 从调度器中的队列不断获取请求
-        while True:
+    def spider_open(self):
 
-            # 从调度器队列中获取一个请求
-            request = await self.scheduler.get_request()
+        for m in self.download_middleware:
+            m.spider_open(self.spider)
 
-            if per_task_sleep:
-                time.sleep(per_task_sleep)
+        for m in self.spider_middleware:
+            m.spider_open(self.spider)
 
-            if request is None:
-                # 暂停
-                await self.heart_beat(sleep_time)
-                self.logger.warning(f"请求队列无请求，休眠{sleep_time}秒")
+        self.spider.spider_open()
 
-                # 如果队列中还是没有数据，则跳循环
-                if self.scheduler.empty() and len(asyncio.all_tasks(self.loop)) <= 1:
-                    break
+    def spider_close(self):
 
+        for m in self.download_middleware:
+            m.spider_close(self.spider)
+
+        for m in self.spider_middleware:
+            m.spider_close(self.spider)
+
+        self.spider.spider_close()
+
+    async def process_spider_request(self, request: BaseRequest):
+
+        if request is None:
+            return False
+
+        for m in self.spider_middleware:
+
+            if not hasattr(m, 'process_request'):
                 continue
 
-            if semaphore._value == 0 and task_sleep:
-                if task_sleep - 0.15 <= 0:
-                    task_sleep = 0
-                time.sleep(task_sleep - 0.15)
+            if isinstance(m, AsyncMiddleware):
+                ret = await m.process_request(request)
+            else:
+                ret = m.process_request(request)
 
-            # 如果取出来的不是请求 忽略
-            if isinstance(request, Request):
-                await semaphore.acquire()
-                asyncio.create_task(self._process_request(request, semaphore))
+            if ret is None:
+                continue
+            elif isinstance(ret, (BaseRequest, Response)):
+                return ret
+            else:
+                raise MiddlerwareError(flag=1)
 
-    @staticmethod
-    async def heart_beat(sleep_time):
-        """ 实现的心跳函数 求情队列无请求时休眠固定时间  """
-        await asyncio.sleep(sleep_time)
+        return None
+    
+    async def process_spider_response(self, response):
+        
+        if response is None:
+            return False
 
-    async def _process_request(self, request, semaphore):
-        """ 从调度器中取出的请求交给下载器中处理 """
+        for m in self.spider_middleware:
 
-        # 调用下载器中的下载请求
-        http_obj = await self.download(request)
+            if not hasattr(m, 'process_response'):
+                continue
 
-        # 处理响应
-        if isinstance(http_obj, Response):
-            await self.scheduler.set_status(http_obj)
-            await self.process_response(http_obj, request)
-        elif isinstance(http_obj, Request):
-            await semaphore.acquire()
-            self.loop.create_task(self._process_request(http_obj, semaphore))
-        else:
-            pass
+            if isinstance(m, AsyncMiddleware):
+                ret = await m.process_response(response)
+            else:
+                ret = m.process_response(response)
 
-        semaphore.release()
+            if ret is None:
+                continue
+            elif isinstance(ret, BaseRequest):
+                return ret
+            else:
+                raise MiddlerwareError(flag=1)
+
+        return None
+
+    async def _scheduler_spider(self):
+
+        self.spider_open()
+
+        # 将请求批量添加到waiting队列
+        self.req_tasks = deque()
+        self.start_requests_iterator = self.spider.start_requests()
+
+        settings = self.settings.SpiderRequestConfig
+        task_sleep = settings.REQUEST_CONCURRENCY_SLEEP
+
+        # 如果start_requests_iterator已用完，则添加要跟踪的变量
+        iterator_exhausted = False
+        self.crawing_time = time.time()
+
+        # 连续循环，从调度程序队列中获取请求
+        while True:
+
+            task_limit = self.spider.attrs['task_limit']
+
+            if task_limit <= 0:
+                raise ValueError('Task limit 必须大于0')
+
+            # Add requests from start_requests generator to self.req_tasks
+            if not iterator_exhausted:
+
+                new_requests = list(itertools.islice(self.start_requests_iterator, task_limit))
+
+                if new_requests:
+                    self.req_tasks.extend(new_requests)
+                else:
+                    # 如果没有提取新的请求，则将迭代器标记为已用完
+                    iterator_exhausted = True
+
+            # 将请求添加到waiting队列
+            if self.req_tasks:
+                await self.request_pool.push_to_waiting(list(self.req_tasks))
+                self.req_tasks.clear()
+
+            tasks = []
+
+            # 处理waiting队列中的请求
+            async for request in self.request_pool.get_request(task_limit):
+                obj = await self.process_spider_request(request)
+                if obj is None:
+                    tasks.append(asyncio.create_task(self.download(request)))
+                elif isinstance(obj, BaseRequest):
+                    await self.request_pool.pending.remove_request(request)
+                    await self.request_pool.push_to_waiting(obj)
+                elif isinstance(obj, Response):
+                    await self.process_response(obj, request)
+                else:
+                    continue
+
+            responses = await asyncio.gather(*tasks)
+
+            # 使用asyncio.gather处理所有请求
+            for response in responses:
+                if response is None:
+                    continue
+                obj = await self.process_spider_response(response)
+                if obj is None:
+                    await self.process_response(response, response.request)
+                elif isinstance(obj, BaseRequest):
+                    await self.request_pool.pending.remove_request(response.request)
+                    await self.request_pool.push_to_failure(obj)
+                else:
+                    continue
+
+            # 暂停以遵循请求速率限制
+            await asyncio.sleep(task_sleep)
+            await self.fresh_progress()
+
+            # 如果没有请求需要处理，则中断循环
+            if iterator_exhausted and not self.req_tasks and await self.request_pool_empty():
+                break
+
+        self.spider_close()
+
+    async def _scheduler_batch_spider(self):
+
+        while True:
+
+            if not self.spider.is_time_to_run():
+                if self.spider.next_time < datetime.now():
+                    self.spider.next_time = self.spider.get_next_time()
+                    continue
+                logger.debug(
+                    f"爬虫({self.spider.name})还未到运行时间，{self.spider.name}将在{self.spider.next_time}启动，当前北京"
+                    f"时间是{datetime.now()}，距离启动还有 {(self.spider.next_time - datetime.now()).total_seconds():,.5f} 秒"
+                )
+                time.sleep(0.9)
+                continue
+
+            self.spider.create_task()
+
+            # 爬虫运行前回调
+            if not self.spider.cust_call_before():
+                break
+
+            self.spider.next_time = self.spider.get_next_time()
+
+            # 更新爬虫状态 --- 爬虫即将开始运行
+            TaskModel.objects.update(
+                items={'id': self.spider.task.id, 'status': 1},
+                where='id',
+            )
+
+            # 执行登录逻辑
+            self.spider.token = self.spider.cust_call_login(self.spider.username, self.spider.password)
+
+            await self._scheduler_spider()
+
+            # 更新爬虫状态 --- 爬虫运行结束
+            TaskModel.objects.update(
+                items={
+                    'id': self.spider.task.id, 'status': 3, 'end_time': datetime.now(),
+                    'data_count': self.data_count,
+                    'running_time': self.spider.get_running_time()
+                },
+                where='id'
+            )
+
+            # 爬虫结束后回调
+            if not self.spider.cust_call_end():
+                break
+
+            await self.request_pool.done.close()
+
+    async def fresh_progress(self):
+
+        running = round(time.time() - self.crawing_time, 3)
+        waiting_count = await self.request_pool.waiting_size()
+        completed_count = await self.request_pool.done_size()
+        speed = round(completed_count / running, 3) if running else 0
+        remaining = round(waiting_count / speed, 3) if waiting_count else 0
+
+        progress = round(
+            (
+                completed_count / (waiting_count + completed_count)
+            ) if (waiting_count + completed_count) else 0, 5
+        )
+        
+        self.spider.attrs['running'] = running
+        self.spider.attrs['remaining'] = remaining
+        self.spider.attrs['avg_speed'] = speed
+        self.spider.attrs['progress'] = progress
+
+    async def request_pool_empty(self):
+        return True if self.request_pool.pending_empty() and await self.request_pool.waiting_empty() and \
+                       self.request_pool.failure_empty() else False
 
     async def download(self, request):
-        """ 下载请求 """
+        """从调度器中取出的请求交给下载器中处理"""
 
+        # 暂停以遵循请求速率限制
+        if self.settings.SpiderRequestConfig.PER_REQUEST_SLEEP:
+            await asyncio.sleep(self.settings.SpiderRequestConfig.PER_REQUEST_SLEEP)
+
+        # 下载请求
         response = await self.downloader.fetch(request)
-        response.request = request
+        await self.request_pool.pending.remove_request(request)
 
-        return response
+        if response is None:
+            return None
+
+        # 处理响应
+        if isinstance(response, Response):
+            await self.request_pool.set_status(response)
+            return response
+        elif isinstance(response, BaseRequest):
+            await self.request_pool.pending.remove_request(response)
+            await self.request_pool.push_to_failure(response)
+        else:
+            await self.request_pool.pending.remove_request(request)
+            await self.request_pool.push_to_failure(request)
+
+        return None
 
     async def process_response(self, response, request):
-        """ 处理响应 """
+        """处理响应"""
 
-        callback = request.callback or self.spider.default_parse
-        result = callback(response)
+        callback = request.callback or self.spider.parse or self.spider.default_parse
+
+        args = []
+        for k in inspect.signature(callback).parameters:
+            if k == 'self':
+                args.append(self.spider)
+            elif k == 'response':
+                args.append(response)
+            else:
+                args.append(None)
+
+        result = callback(*args)
+
+        await self._process_callback(result)
+
+    async def _process_callback(self, result):
+        """处理响应回调结果"""
 
         if result is None:
-            return
+            return None
 
-        if isinstance(result, dict) or isinstance(result, Model):
-            await self.process_item(result)
-            return
-
-        if isinstance(result, Request):
-            # 自动网请求头中添加Referer
-            if result.auto_referer:
-                if result.headers.get('Referer') or result.headers.get('referer'):
-                    await self.scheduler.push_request(result)
-                else:
-                    result.headers['Referer'] = request.url
-                    await self.scheduler.push_request(result)
-            else:
-                await self.scheduler.push_request(result)
-
-            return
-
-        if hasattr(result, '__iter__'):
+        if isinstance(result, Model):
+            await self.datamanager.commit(result)
+        elif isinstance(result, BaseRequest):
+            self.req_tasks.append(result)
+        elif hasattr(result, '__iter__'):
             for item in result:
+                await self._process_callback(item)
+        else:
+            raise ValueError('回调必须返回Model对象或BaseRequest对象')
 
-                if item is None:
-                    continue
-
-                if isinstance(item, Request):
-                    if item.auto_referer:
-                        if item.headers.get('Referer') or item.headers.get('referer'):
-                            await self.scheduler.push_request(item)
-                        else:
-                            item.headers['Referer'] = request.url
-                            await self.scheduler.push_request(item)
-                    else:
-                        await self.scheduler.push_request(item)
-                    continue
-
-                if isinstance(item, dict) or isinstance(item, Model):
-                    await self.process_item(item)
-                    continue
-
-    async def process_item(self, item):
-        for p in self.pipeline:
-            if getattr(p, 'is_async', False):
-                await p.process_item(item)
-            else:
-                p.process_item(item)
-
-    def __del__(self):
-        self.loop.run_until_complete(self.loop.shutdown_asyncgens())
-        self.loop.close()
+        return None

@@ -1,129 +1,111 @@
-from AioSpider import GlobalConstant
-from AioSpider.http import Request, Response
+from AioSpider.exceptions import *
+from AioSpider.http import Response
+from AioSpider.http.base import BaseRequest
+from AioSpider.downloader.downloader_factory import DownloaderFactory
 
 
-session = GlobalConstant().session
-
-
-class DownloadHandler:
+class RequestHandler:
 
     def __init__(self, settings):
-        self.settings = settings
+        use_session = settings.SpiderRequestConfig.REQUEST_USE_SESSION
+        _type = settings.SpiderRequestConfig.REQUEST_USE_METHOD
+        self._handle = DownloaderFactory.create_downloader(settings, _type, use_session)
+
+    async def __call__(self, request, *args, **kwargs):
+        res = await self._handle(request)
+
+        if isinstance(res, Response):
+            return self.set_attr(res)
+
+        return res
+
+    @staticmethod
+    def set_attr(response):
+        """将request的属性绑定到response实例上"""
+
+        for attr in response.request.meta:
+            setattr(response, attr, response.request.meta[attr])
+
+        return response
 
     async def fetch(self, request):
+        return await self(request)
 
-        global session
-        if session is None:
-            session = GlobalConstant().session
-
-        kwargs = {
-            'headers': request.headers,
-            'timeout': request.timeout or getattr(self.settings, "REQUEST_TIMEOUT", 10),
-            'cookies': request.cookies,
-            'proxy': request.proxy
-        }
-
-        url = request.url
-
-        if request.method == "POST":
-            response = await session.post(url, data=request.data, **kwargs)
-            request.status = response.status
-        else:
-            try:
-                response = await session.get(url, **kwargs)
-                request.status = response.status
-            except Exception as e:
-                return e
-        try:
-            content = await response.read()
-            res = Response(
-                url=str(response.url), status=response.status, headers=response.headers,
-                text=content, request=request
-            )
-
-            # 将request的属性绑定到response实例上
-            for attr in request.kwargs:
-                setattr(res, attr, request.kwargs[attr])
-
-            return res
-        except Exception as e:
-            return e
+    async def close_session(self):
+        await self._handle.close_session()
 
 
 class Downloader:
 
-    def __init__(self, middleware, settings):
-        self.handler = DownloadHandler(settings)
+    def __init__(self, settings, middleware):
+        self.handler = RequestHandler(settings)
         self.middleware = middleware
 
     async def fetch(self, request):
 
         http_obj = await self._process_request(request)
-
-        # 丢弃
         if http_obj is None:
             return None
 
-        # 发起请求
-        if isinstance(http_obj, Request):
+        if isinstance(http_obj, BaseRequest):
             res_obj = await self.handler.fetch(http_obj)
 
-            # 下载返回响应
             if isinstance(res_obj, Response):
                 response = await self._process_response(res_obj)
+                if response is None:
+                    return None
+                response.request = http_obj
                 return response
-            # 下载返回异常
+
             if isinstance(res_obj, Exception):
-                request = await self._process_exception(request, res_obj)
-                return request
+                return await self._process_exception(request, res_obj)
 
         if isinstance(http_obj, Response):
-            response = await self._process_response(http_obj)
-            return response
+            return await self._process_response(http_obj)
 
     async def _process_request(self, request):
 
         if request is None:
-            return None
+            return False
 
         for m in self.middleware:
             if not hasattr(m, 'process_request'):
                 continue
-            ret = m.process_request(request)
+
+            ret = await m.process_request(request) if m.is_async else m.process_request(request)
+
             if ret is None:
                 continue
-            if ret is False:
+            elif ret is False:
                 return None
-            elif isinstance(ret, Request):
-                return ret
-            elif isinstance(ret, Response):
+            elif isinstance(ret, (BaseRequest, Response)):
                 return ret
             else:
-                raise Exception('中间件的process_request方法返回值必须为 Request/Response/None/False 对象')
-        else:
-            return request
+                raise MiddlerwareError()
+
+        return request
 
     async def _process_response(self, response):
 
         if response is None:
-            return None
+            return False
 
         for m in reversed(self.middleware):
             if not hasattr(m, 'process_response'):
                 continue
-            ret = m.process_response(response)
+
+            ret = await m.process_response(response) if m.is_async else m.process_response(response)
+
             if ret is None:
                 continue
-            if ret is False:
+            elif ret is False:
                 return None
-            elif isinstance(ret, Request):
-                return ret
-            elif isinstance(ret, Response):
+            elif isinstance(ret, (BaseRequest, Response)):
                 return ret
             else:
-                raise Exception('中间件的process_response方法返回值必须为 Request/Response/None/False 对象')
-        else:
-            return response
+                raise MiddlerwareError(flag=1)
+
+        return response
 
     async def _process_exception(self, request, exception):
 
@@ -133,18 +115,21 @@ class Downloader:
         for m in self.middleware:
             if not hasattr(m, 'process_exception'):
                 continue
+
             ret = m.process_exception(request, exception)
+
             if ret is None:
                 continue
-            if ret is False:
+            elif ret is False:
                 return None
-            elif isinstance(ret, Request):
-                return ret
-            elif isinstance(ret, Response):
-                return ret
             elif isinstance(ret, Exception):
                 raise ret
+            elif isinstance(ret, (BaseRequest, Response)):
+                return ret
             else:
-                raise Exception('中间件的process_exception方法返回值必须为 Request/Response/None/False 对象')
-        else:
-            return request
+                raise MiddlerwareError(flag=2)
+            
+        raise exception
+
+    async def close_session(self):
+        await self.handler.close_session()

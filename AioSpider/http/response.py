@@ -1,23 +1,26 @@
 import re
 import json
-from pprint import pformat
+from typing import Optional
 
-from lxml import etree
-from AioSpider.parse import ReParse, XpathParse
-from AioSpider.utils_pkg import execjs
+import execjs
+from AioSpider.parse import Parse
 from AioSpider import tools
 
 from .request import Request
 
 
-class Response(object):
+class Response:
     """响应对象"""
 
-    def __init__(self, url='', status=200, headers=None, text='', request=None):
+    def __init__(
+            self, url: str = '', status: int = 200, headers: Optional[dict] = None, content: bytes = b'', 
+            text: str = '', request: Optional[Request] = None, **kwargs
+    ):
 
         self.url = url
         self.status = status
         self.headers = headers or {}
+        self.content = content
         self.text = text
         if request is None:
             self.request = Request('')
@@ -25,37 +28,58 @@ class Response(object):
             self.request = request
         self._cached_selector = None
         self._cached_xpath = None
+        self.__json = None
+        self.__jsonp = None
+        
+        for k in kwargs:
+            setattr(self, k, kwargs[k])
 
-    @property
-    def selector(self):
-        from parsel import Selector
-        if self._cached_selector is None:
-            self._cached_selector = Selector(self.text)
-        return self._cached_selector
+    # @property
+    # def selector(self):
+    #     from parsel import Selector
+    #     if self._cached_selector is None:
+    #         self._cached_selector = Selector(self.text)
+    #     return self._cached_selector
+
+    def xpath(self, query, **kwargs) -> Parse:
+        return Parse(self.text).xpath(query, **kwargs)
     
-    @property
-    def cached_xpath(self):
-        if self._cached_xpath is None:
-            if self.text:
-                self._cached_xpath = etree.HTML(self.text)
-            else:
-                self._cached_xpath = etree.HTML('<html></html>>')
-        return self._cached_xpath
+    def css(self, query, **kwargs) -> Parse:
+        return Parse(self.text).css(query, **kwargs)
 
-    def xpath(self, query, **kwargs):
-        return XpathParse(self.cached_xpath.xpath(query, **kwargs))
-
-    def css(self, query):
-        return self.selector.css(query)
+    # def css(self, query):
+    #     return self.selector.css(query)
 
     @property
     def json(self):
-        return json.loads(self.text)
+        if self.__json is None:
+            try:
+                self.__json = json.loads(self.text)
+                times = 3
+                while isinstance(self.__json, str) and times:
+                    self.__json = json.loads(self.__json)
+                    times -= 1
+            except json.decoder.JSONDecodeError:
+                try:
+                    text = re.sub(r'\\u[\da-zA-Z]+', '', self.text)
+                    self.__json = json.loads(text)
+                    times = 3
+                    while isinstance(self.__json, str) and times:
+                        self.__json = json.loads(self.__json)
+                        times -= 1
+                except json.decoder.JSONDecodeError:
+                    self.__json = {}
+        return self.__json
 
     @property
     def jsonp(self):
-        text = re.findall('.*?\((.*)\)', self.text)
-        return json.loads(text[0]) if text else {}
+        if self.__jsonp is None:
+            text = re.findall(r'.*?\((.*)\)', self.text)
+            try:
+                return json.loads(text[0]) if text else {}
+            except json.decoder.JSONDecodeError:
+                return {}
+        return self.__jsonp
 
     @property
     def _execjs(self):
@@ -67,26 +91,14 @@ class Response(object):
     def call_js(self, name, *args):
         return self._execjs.call(name, *args)
 
-    def re(self, regex, **kwargs):
-        arr = re.findall(regex, self.text, **kwargs)
-        return ReParse(arr)
+    def re(self, regex, flags: int = 0) -> Parse:
+        return Parse(self.text).re(regex, flags=flags)
 
     def __str__(self):
-        s = f'Response <{self.status} {self.request.method} {tools.extract_url(self.url)}>'
 
         if self.request.help:
-            s = f'Response <{self.request.help} {self.status} {self.request.method} {self.url}>'
-
-        if self.request.headers:
-            s += '\n' + f'headers: {pformat(self.request.headers)}'
-
-        if self.request.params:
-            s += '\n' + f'params: {pformat(self.request.params)}'
-
-        if self.request.data:
-            s += '\n' + f'data: {pformat(self.request.data)}'
-
-        if self.request.proxy:
-            s += '\n' + f'proxy: {pformat(self.request.proxy)}'
+            s = f'Response <{self.request.help} {self.status} {self.request.method} {tools.extract_url(self.url)}>'
+        else:
+            s = f'Response <{self.status} {self.request.method} {tools.extract_url(self.url)}>'
 
         return s

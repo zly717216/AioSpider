@@ -1,49 +1,119 @@
-from AioSpider.http import Request
-from AioSpider.core import Engine
-from AioSpider import GlobalConstant
+from typing import Union, Callable, NewType
+
+from AioSpider import logger, robot
+from AioSpider.models import SpiderModel
+from AioSpider.http import Response, BaseRequest
+from AioSpider.exceptions import *
+
+
+username = NewType('username', str)
+password = NewType('password', str)
+token = NewType('token', str)
 
 
 class Spider:
 
-    # 爬虫名字 默认AioSpider
-    name = 'AioSpider'
-    start_urls = []
+    name: str = None
+    source: str = None
+    target: str = None
+    description: str = None
+    version: str = None
+    start_urls: list = []
 
-    # 个性化配置文件
-    settings = {
-        # 'TASK_CONCURRENCY_COUNT': 100,
-        # 'HEADERS': {},
-        # 'REQUEST_TIMEOUT': 300,
-        # 'REQUEST_PROXY': None,
+    attrs = {
+        'task_limit': 0,
+        'avg_speed': 0,
+        'running': 0,
+        'remaining': 0,
+        'progress': 0
     }
-    logger = None
-    _connector = None
 
-    @property
-    def connector(self):
-        if self._connector is None:
-            self._connector = GlobalConstant.database
-        return self._connector
+    middleware = None
+
+    class SpiderRequestConfig:
+        pass
+
+    class ConcurrencyStrategyConfig:
+        pass
+
+    class ConnectPoolConfig:
+        pass
+
+    class DataFilterConfig:
+        pass
+
+    class RequestFilterConfig:
+        pass
+
+    class RequestProxyConfig:
+        pass
+
+    class BrowserConfig:
+        pass
+
+    def __init__(
+            self,
+            *,
+            username: str = None,
+            password: str = None,
+            cookies: dict = None, token: str = None,
+            level: int = None,
+            call_before: Callable[[], bool] = None,
+            call_end: Callable[[], bool] = None,
+            call_login: Callable[[str, str], str] = None,
+    ):
+
+        self.id: Optional[int] = None
+        self.status: int = 0
+        self.count: int = 0
+        self.start_time: datetime = None
+        self.interval: Optional[int] = None
+        self.level: int = None
+        self.username: Optional[str] = username
+        self.password: Optional[str] = password
+        self.cookies: Optional[dict] = cookies
+        self.token: Optional[str] = token
+        self.cust_call_before: Callable[[], bool] = call_before or (lambda: True)
+        self.cust_call_end: Callable[[], bool] = call_end or (lambda: True)
+        self.cust_call_login: Callable[[str, str], str] = call_login or (lambda username, password: '')
+
+    def set_name(self):
+        if self.name is None:
+            self.name = self.__class__.__name__
+
+    def get_running_time(self):
+
+        running = int(self.attrs['running'])
+        hour, remainder = divmod(running, 3600)
+        minute, second = divmod(remainder, 60)
+        
+        return f"{hour:02d}:{minute:02d}:{second:02d}"
+
+    def get_remaining_time(self):
+
+        remaining = int(self.attrs['remaining'])
+        hour, remainder = divmod(remaining, 3600)
+        minute, second = divmod(remainder, 60)
+
+        return f"{hour:02d}:{minute:02d}:{second:02d}"
 
     def spider_open(self):
-        self.logger.info(f'------------------- 爬虫：{self.name} 已启动 -------------------')
+        self.set_name()
+        logger.info(f'------------------- 爬虫：{self.name} 已启动 -------------------')
+        robot.info(f'{self.name} 爬虫已启动')
 
     def spider_close(self):
-        self.logger.info(f'------------------- 爬虫：{self.name} 已关闭 -------------------')
+        logger.info(f'------------------- 爬虫：{self.name} 已关闭 -------------------')
+        robot.info(f'{self.name} 爬虫已关闭')
 
     def start_requests(self):
 
         if not hasattr(self, 'start_urls'):
-            self.logger.warning('没有start_urls')
+            logger.warning('没有start_urls')
             return
 
         for url in self.start_urls:
             yield Request(url, callback=self.parse)
-
-    def start(self):
-        """ 把爬虫传递到引擎中，初始化爬虫对象 """
-        engine = Engine(self)
-        engine.start()
 
     def parse(self, response):
         """
@@ -53,5 +123,5 @@ class Spider:
         """
         pass
 
-    def default_parse(self, response):
+    def default_parse(self, response: Response):
         pass
